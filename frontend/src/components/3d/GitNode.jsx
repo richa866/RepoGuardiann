@@ -99,29 +99,16 @@ export function GitNode({
   const groupRef = useRef();
   const orbRef = useRef();
   const ringRef = useRef();
-  const innerGemRef = useRef();
   const [hovered, setHovered] = useState(false);
   const isInRangeRef = useRef(true);
   const [isInRange, setIsInRange] = useState(true);
 
-  // Load Unified Faceted Crystal Model & Procedural PBR Textures
+  // Exact same crystal model and textures as the Git Branch Graph
   const { scene } = useGLTF('/models/git_branch_node.glb');
-  const [crystalNormal, crystalRoughness, crystalMetalness, crystalEmissive] = useTexture([
+  const [crystalNormal, crystalRoughness] = useTexture([
     '/textures/crystal_normal.png',
     '/textures/crystal_roughness.png',
-    '/textures/crystal_metalness.png',
-    '/textures/crystal_emissive.png',
   ]);
-
-  const clonedScene = useMemo(() => {
-    const clone = scene.clone(true);
-    clone.traverse((child) => {
-      if (child.isMesh && child.material) {
-        child.material = child.material.clone();
-      }
-    });
-    return clone;
-  }, [scene]);
 
   const categories = issue?.latest_categories || [];
   const isSecurity = categories.includes('security-sensitive');
@@ -213,38 +200,29 @@ export function GitNode({
     };
   }, [isConfirmed, isSecurity, isUrgent, isContentious, isRegression, isDuplicate, isStale, isNeedsInfo]);
 
-  // Apply rich PBR texture maps and material styling
-  useMemo(() => {
-    [crystalNormal, crystalRoughness, crystalMetalness, crystalEmissive].forEach((tex) => {
-      if (tex) {
-        tex.wrapS = THREE.RepeatWrapping;
-        tex.wrapT = THREE.RepeatWrapping;
-        tex.repeat.set(1.5, 1.5);
-      }
-    });
-
-    clonedScene.traverse((child) => {
-      if (child.isMesh && child.material) {
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone(true);
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.material = child.material.clone();
         child.material.color = color;
         child.material.normalMap = crystalNormal;
-        child.material.normalScale = new THREE.Vector2(1.8, 1.8);
+        child.material.normalScale = new THREE.Vector2(1.5, 1.5);
         child.material.roughnessMap = crystalRoughness;
-        child.material.metalnessMap = crystalMetalness;
-        child.material.emissiveMap = crystalEmissive;
         if (child.material.emissive) {
           child.material.emissive = glowColor;
           child.material.emissiveIntensity = baseIntensity;
         }
         child.material.transparent = opacity < 1.0;
         child.material.opacity = opacity;
-        child.material.roughness = 0.22;
+        child.material.roughness = 0.2;
         child.material.metalness = 0.88;
-        child.material.clearcoat = 0.65;
-        child.material.clearcoatRoughness = 0.12;
+        child.material.clearcoat = 0.6;
         child.material.needsUpdate = true;
       }
     });
-  }, [clonedScene, color, glowColor, baseIntensity, opacity, crystalNormal, crystalRoughness, crystalMetalness, crystalEmissive]);
+    return clone;
+  }, [scene, color, glowColor, baseIntensity, opacity, crystalNormal, crystalRoughness]);
 
   useFrame((state) => {
     if (!groupRef.current) return;
@@ -272,17 +250,11 @@ export function GitNode({
 
     // Spin ONLY the inner crystal orb, keeping groupRef and Html card completely static
     if (orbRef.current) {
-      orbRef.current.rotation.y += 0.01;
+      orbRef.current.rotation.y += 0.012;
       orbRef.current.rotation.x = Math.sin(t * 0.6) * 0.05;
 
       const targetScale = isSelected ? 1.35 : hovered ? 1.2 : 1.0;
       orbRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
-    }
-
-    // Inner gem nucleus counter-rotation
-    if (innerGemRef.current) {
-      innerGemRef.current.rotation.y -= 0.02;
-      innerGemRef.current.rotation.z += 0.015;
     }
 
     // Orbiting verified ring animation
@@ -360,30 +332,9 @@ export function GitNode({
         document.body.style.cursor = 'auto';
       }}
     >
-      {/* Rotating Textured 3D Crystal Orb */}
+      {/* Rotating Textured 3D Crystal Node */}
       <group ref={orbRef}>
-        <primitive object={clonedScene} scale={0.75} />
-
-        {/* Floating Faceted Inner Gem Nucleus */}
-        <mesh ref={innerGemRef} scale={0.35} rotation={[0, 0, Math.PI / 4]}>
-          <octahedronGeometry args={[1, 0]} />
-          <meshStandardMaterial
-            color={glowColor}
-            emissive={glowColor}
-            emissiveIntensity={baseIntensity * 1.5}
-            roughness={0.1}
-            metalness={0.92}
-            wireframe={isRegression || isNeedsInfo}
-          />
-        </mesh>
-
-        {/* Security / Urgent Rapid Energy Belt */}
-        {(isSecurity || isUrgent) && (
-          <mesh rotation={[Math.PI / 4, 0.4, 0]}>
-            <torusGeometry args={[1.05, 0.022, 16, 32]} />
-            <meshBasicMaterial color={glowColor} transparent opacity={0.75} />
-          </mesh>
-        )}
+        <primitive object={clonedScene} scale={0.7} />
 
         {/* Selected Minimalist Ring */}
         {isSelected && (
@@ -492,5 +443,3 @@ export function GitNode({
 useGLTF.preload('/models/git_branch_node.glb');
 useTexture.preload('/textures/crystal_normal.png');
 useTexture.preload('/textures/crystal_roughness.png');
-useTexture.preload('/textures/crystal_metalness.png');
-useTexture.preload('/textures/crystal_emissive.png');
