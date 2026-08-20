@@ -311,3 +311,9 @@ blender --background --python scripts/generate_smooth_issue_orb.py
 * **Vertical Triage Filter Slider (`DynamicFilterRibbon.jsx`)**:
   * Transformed horizontal filter ribbon into a sleek vertical command slider anchored on the right flank (`fixed top-24 right-6`).
   * Features high-contrast glowing neon active states, individual category icons with micro-interactions, category count pills, and dynamic ambient lighting shifts.
+
+### 📍 Milestone 17: Multi-Category Filter Matching Fix (Needs Info)
+* **Resolved Category Priority Shadowing**:
+  * Fixed an issue where issues with multiple categories (e.g. `#1673` with `["needs-more-info", "contentious"]`) were being absorbed into earlier `if-else` branches, leaving `clusterMap.needs_info` empty when filtered.
+  * Implemented `matchesCategory()` helper in `GitTreeScene.jsx` and updated filtering logic so that when any category filter is clicked, all issues containing that tag are populated and rendered.
+  * Verified that clicking `Needs Info` displays issue `#1673` centered in the 3D scene with its turquoise orb and proportional title badge.

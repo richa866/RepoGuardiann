@@ -29,8 +29,12 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
   const isRegression = categories.includes('possible-regression');
   const isDuplicate = categories.includes('likely-duplicate');
   const isStale = categories.includes('stale/needs-triage');
-  const isNeedsInfo = categories.includes('needs-more-info');
-  const isEscalated = Boolean(issue?.latest_escalate || isSecurity || isUrgent || isRegression || isContentious);
+  const isNeedsInfo = 
+    categories.includes('needs-more-info') || 
+    categories.includes('needs-info') || 
+    categories.includes('needs_info') ||
+    categories.some(c => typeof c === 'string' && c.toLowerCase().includes('info'));
+  const isEscalated = Boolean(issue?.latest_escalate || isSecurity || isUrgent || isRegression || isContentious || isNeedsInfo);
 
   const { color, glowColor, baseIntensity, pulseSpeed, opacity } = useMemo(() => {
     if (isSecurity) {
@@ -149,6 +153,8 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
 
   const categoryLabel = categories[0]
     ? categories[0].replace('-sensitive', '').replace('/needs-triage', '')
+    : isNeedsInfo
+    ? 'needs-info'
     : 'open';
 
   return (

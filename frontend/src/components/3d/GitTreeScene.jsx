@@ -42,7 +42,7 @@ class ErrorBoundary3D extends Component {
 }
 
 // Spaced-out 3D Spatial Cluster Centers
-const CLUSTERS = {
+export const CLUSTERS = {
   security_urgent: {
     id: 'security_urgent',
     name: 'Security & Urgent Hub',
@@ -86,6 +86,31 @@ const CLUSTERS = {
     center: [0, -3.0, 0],
   },
 };
+
+export function matchesCategory(cats = [], clusterKey) {
+  if (!Array.isArray(cats)) return false;
+  if (clusterKey === 'security_urgent') {
+    return cats.includes('security-sensitive') || cats.includes('urgent');
+  }
+  if (clusterKey === 'regression') {
+    return cats.includes('possible-regression');
+  }
+  if (clusterKey === 'contentious') {
+    return cats.includes('contentious');
+  }
+  if (clusterKey === 'duplicates') {
+    return cats.includes('likely-duplicate') || cats.includes('stale/needs-triage');
+  }
+  if (clusterKey === 'needs_info') {
+    return (
+      cats.includes('needs-more-info') ||
+      cats.includes('needs-info') ||
+      cats.includes('needs_info') ||
+      cats.some((c) => typeof c === 'string' && c.toLowerCase().includes('info'))
+    );
+  }
+  return false;
+}
 
 const THEME_BACKGROUNDS = {
   all: '#040714',
@@ -197,22 +222,33 @@ function SceneContent({
       normal: [],
     };
 
-    issues.forEach((issue) => {
-      const cats = issue.latest_categories || [];
-      if (cats.includes('security-sensitive') || cats.includes('urgent')) {
-        clusterMap.security_urgent.push(issue);
-      } else if (cats.includes('possible-regression')) {
-        clusterMap.regression.push(issue);
-      } else if (cats.includes('contentious')) {
-        clusterMap.contentious.push(issue);
-      } else if (cats.includes('likely-duplicate') || cats.includes('stale/needs-triage')) {
-        clusterMap.duplicates.push(issue);
-      } else if (cats.includes('needs-more-info')) {
-        clusterMap.needs_info.push(issue);
-      } else {
-        clusterMap.normal.push(issue);
-      }
-    });
+    if (activeFilter !== 'all') {
+      // Direct category filtering: all issues matching the active filter are included
+      issues.forEach((issue) => {
+        const cats = issue.latest_categories || [];
+        if (matchesCategory(cats, activeFilter)) {
+          clusterMap[activeFilter].push(issue);
+        }
+      });
+    } else {
+      // Global overview: map each issue into its primary cluster
+      issues.forEach((issue) => {
+        const cats = issue.latest_categories || [];
+        if (matchesCategory(cats, 'security_urgent')) {
+          clusterMap.security_urgent.push(issue);
+        } else if (matchesCategory(cats, 'regression')) {
+          clusterMap.regression.push(issue);
+        } else if (matchesCategory(cats, 'contentious')) {
+          clusterMap.contentious.push(issue);
+        } else if (matchesCategory(cats, 'duplicates')) {
+          clusterMap.duplicates.push(issue);
+        } else if (matchesCategory(cats, 'needs_info')) {
+          clusterMap.needs_info.push(issue);
+        } else {
+          clusterMap.normal.push(issue);
+        }
+      });
+    }
 
     const nodes = [];
     const conns = [];
@@ -220,7 +256,6 @@ function SceneContent({
     let selPos = null;
 
     Object.entries(clusterMap).forEach(([clusterKey, allClusterIssues]) => {
-      // If a specific filter is active, only render that cluster!
       if (activeFilter !== 'all' && activeFilter !== clusterKey) {
         return;
       }
@@ -378,11 +413,11 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
     };
     issues.forEach((i) => {
       const cats = i.latest_categories || [];
-      if (cats.includes('security-sensitive') || cats.includes('urgent')) map.security_urgent++;
-      if (cats.includes('possible-regression')) map.regression++;
-      if (cats.includes('contentious')) map.contentious++;
-      if (cats.includes('likely-duplicate') || cats.includes('stale/needs-triage')) map.duplicates++;
-      if (cats.includes('needs-more-info')) map.needs_info++;
+      if (matchesCategory(cats, 'security_urgent')) map.security_urgent++;
+      if (matchesCategory(cats, 'regression')) map.regression++;
+      if (matchesCategory(cats, 'contentious')) map.contentious++;
+      if (matchesCategory(cats, 'duplicates')) map.duplicates++;
+      if (matchesCategory(cats, 'needs_info')) map.needs_info++;
     });
     return map;
   }, [issues]);
@@ -391,7 +426,7 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
 
   return (
     <div className="w-full h-full relative select-none">
-      {/* Dynamic Pill-Shaped Filter Ribbon on Top-Right */}
+      {/* Dynamic Vertical Pill-Shaped Filter Slider on Right Flank */}
       <DynamicFilterRibbon
         activeFilter={activeFilter}
         onSelectFilter={setActiveFilter}
