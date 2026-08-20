@@ -288,3 +288,12 @@ blender --background --python scripts/generate_smooth_issue_orb.py
   * Dynamically changes the cosmic background and lighting color theme based on the active filter (All, Security, Regressions, Contentious, Duplicates, Needs Info).
 * **Smooth Swooshing Telemetry Pill (`MonitorPanel.jsx`)**:
   * Fluid expansion/collapse animation between the ultra-compact status pill and the slide-over terminal sheet.
+
+### 📍 Milestone 14: Photorealistic FBM Nebula Shader & Centered Telemetry Matrix Table
+* **Photorealistic 5-Octave FBM Nebula Shader (`NebulaBackground.jsx`)**:
+  * Replaced low-poly mesh spheres with a custom GLSL raymarched sky dome shader with 5-octave Fractional Brownian Motion, Simplex noise ionization filaments, 4-point lens flare diffraction stars, and organic volumetric gas swirls.
+  * Faithfully matches the user's reference photo color palette (Teal `#1b999c`, Jade `#38a388`, Golden Stardust `#f7d08a`, Violet `#591a4f`, Midnight Indigo `#1c183e`).
+  * Dynamic theme transitions smoothly shift shader uniform color vectors on filter changes.
+* **Centered Subtask Execution Matrix Table (`MonitorPanel.jsx`)**:
+  * Clicking the top-left telemetry pill opens a full-width centered glassmorphism command table modal with smooth swoosh/zoom animation (`animate-in zoom-in-95`).
+  * Displays real-time subtask queues, scheduler metrics, status filters (`all`, `done`, `running`, `pending`), execution logs, and instant force-drain controls.
