@@ -182,8 +182,8 @@ def main():
         embed_issue(DEMO_REPO, issue, comments)
 
     for issue in DUMMY_ISSUES:
-        enqueue_subtask(DEMO_REPO, "duplicate_check", issue["number"])
-        enqueue_subtask(DEMO_REPO, "missing_info_check", issue["number"])
+        enqueue_subtask(DEMO_REPO, "duplicate_check", issue["number"], issue["updated_at"])
+        enqueue_subtask(DEMO_REPO, "missing_info_check", issue["number"], issue["updated_at"])
     enqueue_subtask(DEMO_REPO, "health_trend_check", None)
 
     print(f"Seeded {len(DUMMY_ISSUES)} dummy issues into '{DEMO_REPO}', embedded into Chroma, "

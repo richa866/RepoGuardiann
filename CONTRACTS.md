@@ -11,7 +11,7 @@ This document defines the frozen data models, SQLite schema, REST API contracts,
 1. **`repos`**: Connected GitHub repositories and live sync status.
 2. **`issues`**: Synced issues and pull requests scoped by `repo`.
 3. **`comments`**: Issue discussion comments and maintainer replies.
-4. **`subtasks`**: Autonomous agent subtasks queue (`duplicate_check`, `missing_info_check`, `health_trend_check`).
+4. **`subtasks`**: Autonomous agent subtasks queue (`duplicate_check`, `missing_info_check`, `health_trend_check`). Idempotent via a `UNIQUE dedupe_key`: `repo|issue_number|task_type|issue_updated_at` for per-issue subtasks, `repo|None|task_type|UTC-day` for repo-wide ones (e.g. `health_trend_check`) — `enqueue_subtask()` uses `INSERT OR IGNORE`, so re-polling an unchanged issue or re-triggering a repo-wide check within the same day is a no-op, not a duplicate row.
 5. **`escalations`**: Agent escalation verdicts, categories, evidence JSON, and maintainer follow-up drafts.
 6. **`feedback`**: Human-in-the-loop maintainer decisions (thumbs up/down, override notes).
 7. **`health_snapshots`**: Periodic repository metrics (backlog growth, SLA response drift, duplicate rate, contributor activity).

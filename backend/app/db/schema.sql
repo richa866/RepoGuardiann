@@ -50,7 +50,12 @@ CREATE TABLE IF NOT EXISTS subtasks (
     log TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     started_at TEXT,
-    finished_at TEXT
+    finished_at TEXT,
+    -- repo|issue_number|task_type|issue_updated_at for per-issue subtasks, or
+    -- repo|None|task_type|UTC-day for repo-wide ones (e.g. health_trend_check).
+    -- UNIQUE + INSERT OR IGNORE is what actually makes enqueue_subtask idempotent;
+    -- NULL is fine here since SQLite never treats two NULLs as equal for UNIQUE.
+    dedupe_key TEXT UNIQUE
 );
 CREATE INDEX IF NOT EXISTS idx_subtasks_status ON subtasks(status);
 CREATE INDEX IF NOT EXISTS idx_subtasks_repo_issue ON subtasks(repo, issue_number);

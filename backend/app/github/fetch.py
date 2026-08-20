@@ -100,8 +100,8 @@ def run_sync(
                 comments = []
 
             embed_issue(repo=repo, issue=issue, comments=comments)
-            enqueue_subtask(repo, "duplicate_check", issue["number"])
-            enqueue_subtask(repo, "missing_info_check", issue["number"])
+            enqueue_subtask(repo, "duplicate_check", issue["number"], issue["updated_at"])
+            enqueue_subtask(repo, "missing_info_check", issue["number"], issue["updated_at"])
             if progress_callback:
                 progress_callback("embedding_history", idx, len(changed_issues))
             set_sync_state(repo, current=idx, total=len(changed_issues))

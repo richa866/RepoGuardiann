@@ -12,7 +12,7 @@ from pathlib import Path
 from app.config import settings
 
 _local = threading.local()
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3  # v3: subtasks.dedupe_key (UNIQUE) for idempotent enqueue_subtask
 SCHEMA_FILE = Path(__file__).resolve().parent / "schema.sql"
 
 DATA_TABLES = [
@@ -134,13 +134,33 @@ def replace_comments(repo: str, issue_number: int, comments: list[dict]) -> None
         )
 
 
-def enqueue_subtask(repo: str, task_type: str, issue_number: int | None = None) -> int:
+def enqueue_subtask(
+    repo: str,
+    task_type: str,
+    issue_number: int | None = None,
+    issue_updated_at: str | None = None,
+) -> int:
+    """Idempotent: re-polling the same unchanged issue (or re-triggering a repo-wide
+    check within the same UTC day) is a no-op instead of piling up duplicate rows.
+    Returns the id of the queued subtask -- either the one just inserted, or the
+    existing one that made this call a no-op."""
+    if issue_number is not None:
+        dedupe_key = f"{repo}|{issue_number}|{task_type}|{issue_updated_at or ''}"
+    else:
+        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        dedupe_key = f"{repo}|None|{task_type}|{day}"
+
     with tx() as c:
         cur = c.execute(
-            "INSERT INTO subtasks (repo, issue_number, task_type, status, created_at) "
-            "VALUES (?, ?, ?, 'pending', ?)",
-            (repo, issue_number, task_type, now_iso()),
+            "INSERT OR IGNORE INTO subtasks (repo, issue_number, task_type, status, created_at, dedupe_key) "
+            "VALUES (?, ?, ?, 'pending', ?, ?)",
+            (repo, issue_number, task_type, now_iso(), dedupe_key),
         )
+        if cur.rowcount == 0:
+            existing = c.execute(
+                "SELECT id FROM subtasks WHERE dedupe_key = ?", (dedupe_key,)
+            ).fetchone()
+            return existing["id"] if existing else -1
         return cur.lastrowid
 
 
