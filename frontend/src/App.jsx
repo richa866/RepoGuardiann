@@ -54,17 +54,17 @@ export default function App() {
         ]);
         if (issueRes?.issues) {
           setIssues(issueRes.issues);
-          setFeedbackMap((prev) => {
-            const next = { ...prev };
-            issueRes.issues.forEach((i) => {
-              if (i.latest_feedback && !next[i.number]) {
-                next[i.number] = i.latest_feedback;
-              } else if (i.latest_human_override && !next[i.number]) {
-                next[i.number] = i.latest_human_override === 'confirmed' ? 'up' : 'down';
-              }
-            });
-            return next;
+          // Build feedbackMap fresh from server on every refresh —
+          // no stale local accumulation, undo/reset are always reflected.
+          const fresh = {};
+          issueRes.issues.forEach((i) => {
+            if (i.latest_feedback) {
+              fresh[i.number] = i.latest_feedback;
+            } else if (i.latest_human_override) {
+              fresh[i.number] = i.latest_human_override === 'confirmed' ? 'up' : 'down';
+            }
           });
+          setFeedbackMap(fresh);
         }
         if (monRes) setMonitorStatus(monRes);
       }
@@ -117,11 +117,21 @@ export default function App() {
   };
 
   const handleFeedbackSubmitted = (issueNum, vote) => {
-    setFeedbackMap((prev) => ({ ...prev, [issueNum]: vote }));
-    if (vote === 'down' && selectedIssue?.number === issueNum) {
-      setSelectedIssue(null);
+    if (vote === null) {
+      // Undo: remove from feedbackMap entirely
+      setFeedbackMap((prev) => {
+        const next = { ...prev };
+        delete next[issueNum];
+        return next;
+      });
+      showToast(`Feedback reset for #${issueNum} — restored to AI triage state`);
+    } else {
+      setFeedbackMap((prev) => ({ ...prev, [issueNum]: vote }));
+      if (vote === 'down' && selectedIssue?.number === issueNum) {
+        setSelectedIssue(null);
+      }
+      showToast(`Feedback recorded for #${issueNum} (${vote === 'up' ? 'Confirmed' : 'Overridden'})`);
     }
-    showToast(`Feedback recorded for #${issueNum} (${vote === 'up' ? 'Confirmed' : 'Overridden'})`);
     refreshData();
   };
 
