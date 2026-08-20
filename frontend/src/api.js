@@ -47,6 +47,7 @@ export const api = {
   listIssues: (params = {}) => call(client.get("/issues", { params })),
   getIssue: (number, repo) => call(client.get(`/issues/${number}`, { params: repo ? { repo } : {} })),
   submitFeedback: (number, body) => call(client.post(`/issues/${number}/feedback`, body)),
+  resetFeedback: (number, repo) => call(client.delete(`/issues/${number}/feedback`, { params: repo ? { repo } : {} })),
   healthMetrics: (repo) => call(client.get("/health-metrics", { params: repo ? { repo } : {} })),
   healthTrendsSummary: (repo) => call(client.get("/api/health-trends/summary", { params: repo ? { repo } : {} })),
   healthTrendsBacklogDrift: (repo, days = 30) => call(client.get("/api/health-trends/backlog-drift", { params: { ...(repo ? { repo } : {}), ...(days ? { days } : {}) } })),

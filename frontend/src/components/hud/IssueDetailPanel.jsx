@@ -27,7 +27,8 @@ import {
   GitPullRequest,
   GitMerge,
   Link as LinkIcon,
-  User
+  User,
+  RotateCcw
 } from 'lucide-react';
 import api from '../../api';
 import { RAGDiffModal } from './RAGDiffModal';
@@ -121,6 +122,16 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
     };
 
     await api.submitFeedback(issue.number, payload);
+    setSubmittingFeedback(false);
+  }
+
+  async function handleResetFeedback() {
+    setSubmittingFeedback(true);
+    setFeedbackVote(null);
+    if (onFeedbackSubmitted) {
+      onFeedbackSubmitted(issue.number, null);
+    }
+    await api.resetFeedback(issue.number, issue.repo);
     setSubmittingFeedback(false);
   }
 
@@ -640,7 +651,15 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <span className="font-bold">✓ Confirmed by Maintainer</span>
             </div>
-            <span className="text-[10px] text-emerald-400/80 uppercase">AI Verdict Validated</span>
+            <button
+              onClick={handleResetFeedback}
+              disabled={submittingFeedback}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono text-zinc-300 hover:text-white bg-white/10 hover:bg-white/20 border border-white/15 transition cursor-pointer"
+              title="Reset maintainer confirmation and restore original AI state"
+            >
+              <RotateCcw className="w-3 h-3 text-zinc-400" />
+              <span>Undo</span>
+            </button>
           </div>
         ) : feedbackVote === 'down' ? (
           <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-mono flex items-center justify-between gap-2 shadow-lg animate-in fade-in">
@@ -648,7 +667,15 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
               <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
               <span className="font-bold">✗ Overridden by Maintainer</span>
             </div>
-            <span className="text-[10px] text-amber-400/80 uppercase">Removed from 3D View</span>
+            <button
+              onClick={handleResetFeedback}
+              disabled={submittingFeedback}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono text-zinc-300 hover:text-white bg-white/10 hover:bg-white/20 border border-white/15 transition cursor-pointer"
+              title="Reset maintainer override and restore original AI state"
+            >
+              <RotateCcw className="w-3 h-3 text-zinc-400" />
+              <span>Undo</span>
+            </button>
           </div>
         ) : (
           <div className="flex items-center gap-2">

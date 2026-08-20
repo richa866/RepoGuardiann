@@ -199,6 +199,19 @@ def get_issue_feedback(number: int, repo: Optional[str] = None):
     ]
 
 
+@router.delete("/issues/{number}/feedback")
+def reset_issue_feedback(number: int, repo: Optional[str] = None):
+    """DELETE /issues/{number}/feedback — resets feedback and restores original AI verdict."""
+    _ensure_override_reason_column()
+    target = get_effective_repo(repo)
+    conn = get_conn()
+    with tx() as c:
+        c.execute("DELETE FROM feedback WHERE repo = ? AND issue_number = ?", (target, number))
+        c.execute("UPDATE escalations SET human_override = NULL WHERE repo = ? AND issue_number = ?", (target, number))
+
+    return {"status": "reset", "repo": target, "issue_number": number}
+
+
 @router.get("/feedback/override-stats", response_model=OverrideStats)
 def get_override_stats(repo: Optional[str] = None):
     """GET /feedback/override-stats
