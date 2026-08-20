@@ -1,5 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { X, GitBranch, Key, ArrowRight, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { 
+  X, 
+  GitBranch, 
+  Key, 
+  ArrowRight, 
+  CheckCircle2, 
+  AlertCircle, 
+  RefreshCw, 
+  FolderGit2, 
+  Star, 
+  Lock, 
+  Unlock 
+} from 'lucide-react';
 import api from '../../api';
 
 const PRESET_REPOS = [
@@ -9,12 +21,28 @@ const PRESET_REPOS = [
   { repo: 'fastapi/typer', label: 'fastapi/typer (Clean & Fast)' },
 ];
 
-export function ConnectRepoModal({ isOpen, onClose, onConnected }) {
+export function ConnectRepoModal({ isOpen, onClose, onConnected, user, sessionToken }) {
   const [repoInput, setRepoInput] = useState('');
   const [tokenInput, setTokenInput] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [userRepos, setUserRepos] = useState([]);
+  const [loadingUserRepos, setLoadingUserRepos] = useState(false);
+  const [tab, setTab] = useState(user ? 'my_repos' : 'presets');
+
+  // Load user repositories if authenticated
+  useEffect(() => {
+    if (isOpen && sessionToken) {
+      setLoadingUserRepos(true);
+      api.authListUserRepos(sessionToken, 50).then(({ data }) => {
+        setLoadingUserRepos(false);
+        if (data?.repos) {
+          setUserRepos(data.repos);
+        }
+      });
+    }
+  }, [isOpen, sessionToken]);
 
   useEffect(() => {
     let timer;
@@ -55,18 +83,18 @@ export function ConnectRepoModal({ isOpen, onClose, onConnected }) {
     }
   }
 
-  function handleSelectPreset(repo) {
-    setRepoInput(repo);
+  function handleSelectRepo(repoName) {
+    setRepoInput(repoName);
     setErrorMessage(null);
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="w-full max-w-lg rounded-3xl glass-panel-glow border border-sky-500/30 p-6 space-y-5 shadow-2xl relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="w-full max-w-lg rounded-3xl bg-black/90 border border-sky-500/30 p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-xl hover:bg-white/10 text-slate-400 hover:text-slate-200 transition"
+          className="absolute top-4 right-4 p-1.5 rounded-xl hover:bg-white/10 text-slate-400 hover:text-slate-200 transition cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
@@ -81,64 +109,143 @@ export function ConnectRepoModal({ isOpen, onClose, onConnected }) {
               Connect Live GitHub Repository
             </h2>
             <p className="text-xs text-slate-400 font-mono">
-              Live ingest → Chroma embeddings → Autonomous subtasks
+              Live ingest → Chroma embeddings → Autonomous triage matrix
             </p>
           </div>
         </div>
 
-        {/* Preset Repos */}
-        <div className="space-y-1.5">
-          <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
-            Recommended Hackathon Repos
-          </span>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {PRESET_REPOS.map((item) => (
-              <button
-                key={item.repo}
-                type="button"
-                onClick={() => handleSelectPreset(item.repo)}
-                className={`p-2.5 rounded-xl text-left text-xs font-mono border transition ${
-                  repoInput === item.repo
-                    ? 'bg-sky-950/80 text-sky-200 border-sky-400 shadow-sm'
-                    : 'bg-slate-900/50 text-slate-300 border-white/5 hover:border-sky-500/30 hover:bg-slate-800/60'
-                }`}
-              >
-                <div className="font-bold text-sky-400">{item.repo}</div>
-                <div className="text-[10px] text-slate-400 truncate">{item.label}</div>
-              </button>
-            ))}
-          </div>
+        {/* Selection Tabs */}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/10 font-mono text-xs">
+          {user && (
+            <button
+              type="button"
+              onClick={() => setTab('my_repos')}
+              className={`flex-1 py-1.5 rounded-lg transition ${
+                tab === 'my_repos' ? 'bg-sky-500/20 text-sky-300 font-bold border border-sky-500/30' : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              My Repositories ({userRepos.length || '...'})
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setTab('presets')}
+            className={`flex-1 py-1.5 rounded-lg transition ${
+              tab === 'presets' ? 'bg-sky-500/20 text-sky-300 font-bold border border-sky-500/30' : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Recommended Demo Repos
+          </button>
         </div>
+
+        {/* My Repositories List */}
+        {tab === 'my_repos' && user && (
+          <div className="space-y-1.5">
+            <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+              {loadingUserRepos ? (
+                <div className="p-4 text-center text-xs font-mono text-zinc-400 flex items-center justify-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Loading your accessible GitHub repositories...
+                </div>
+              ) : userRepos.length > 0 ? (
+                userRepos.map((r) => {
+                  const fullName = r.full_name || r.name;
+                  const isSelected = repoInput === fullName;
+                  return (
+                    <button
+                      key={r.id || fullName}
+                      type="button"
+                      onClick={() => handleSelectRepo(fullName)}
+                      className={`w-full p-2.5 rounded-xl text-left text-xs font-mono border transition flex items-center justify-between cursor-pointer ${
+                        isSelected
+                          ? 'bg-sky-950/80 text-sky-200 border-sky-400 shadow-sm'
+                          : 'bg-slate-900/50 text-slate-300 border-white/5 hover:border-sky-500/30 hover:bg-slate-800/60'
+                      }`}
+                    >
+                      <div className="truncate min-w-0 pr-2">
+                        <div className="font-bold text-sky-300 flex items-center gap-1.5 truncate">
+                          {r.private ? <Lock className="w-3 h-3 text-amber-400 shrink-0" /> : <Unlock className="w-3 h-3 text-zinc-400 shrink-0" />}
+                          <span className="truncate">{fullName}</span>
+                        </div>
+                        {r.description && (
+                          <div className="text-[10px] text-zinc-400 truncate mt-0.5">{r.description}</div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-zinc-500 shrink-0">
+                        {r.stargazers_count !== undefined && (
+                          <span className="flex items-center gap-0.5">
+                            <Star className="w-2.5 h-2.5 text-amber-400" />
+                            {r.stargazers_count}
+                          </span>
+                        )}
+                        <span>{r.language || 'Code'}</span>
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="p-4 text-center text-xs font-mono text-zinc-400">
+                  No repositories found. Enter a repository name manually below.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Preset Repos */}
+        {tab === 'presets' && (
+          <div className="space-y-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {PRESET_REPOS.map((item) => (
+                <button
+                  key={item.repo}
+                  type="button"
+                  onClick={() => handleSelectRepo(item.repo)}
+                  className={`p-2.5 rounded-xl text-left text-xs font-mono border transition cursor-pointer ${
+                    repoInput === item.repo
+                      ? 'bg-sky-950/80 text-sky-200 border-sky-400 shadow-sm'
+                      : 'bg-slate-900/50 text-slate-300 border-white/5 hover:border-sky-500/30 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <div className="font-bold text-sky-400">{item.repo}</div>
+                  <div className="text-[10px] text-slate-400 truncate">{item.label}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleConnect} className="space-y-3.5">
           <div className="space-y-1">
             <label className="text-xs font-mono text-slate-300">
-              Repository (owner/repo) *
+              Repository Identifier (owner/repo) *
             </label>
             <input
               type="text"
               required
-              placeholder="e.g. httpie/cli or psf/black"
+              placeholder="e.g. httpie/cli or pallets/flask"
               value={repoInput}
               onChange={(e) => setRepoInput(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-950/80 border border-white/10 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-400"
+              className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-white/10 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-400"
             />
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-mono text-slate-300 flex items-center justify-between">
-              <span>Personal Access Token (Optional)</span>
-              <span className="text-[10px] text-slate-500">Public repos work with 0 tokens</span>
-            </label>
-            <input
-              type="password"
-              placeholder="ghp_... (raises rate limit to 5000/hr)"
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-950/80 border border-white/10 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-400"
-            />
-          </div>
+          {!user && (
+            <div className="space-y-1">
+              <label className="text-xs font-mono text-slate-300 flex items-center justify-between">
+                <span>Personal Access Token (Optional)</span>
+                <span className="text-[10px] text-slate-500">Public repos work with 0 tokens</span>
+              </label>
+              <input
+                type="password"
+                placeholder="ghp_... (raises rate limit to 5000/hr)"
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-white/10 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-400"
+              />
+            </div>
+          )}
 
           {/* Progress / Status */}
           {connecting && syncStatus && (
@@ -185,7 +292,7 @@ export function ConnectRepoModal({ isOpen, onClose, onConnected }) {
             <button
               type="submit"
               disabled={connecting || !repoInput.trim()}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-slate-950 transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-sky-500/20"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-slate-950 transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-sky-500/20 cursor-pointer"
             >
               <span>{connecting ? 'Connecting & Ingesting...' : 'Connect & Monitor'}</span>
               <ArrowRight className="w-3.5 h-3.5" />

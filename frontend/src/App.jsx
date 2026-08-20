@@ -10,6 +10,7 @@ import { ListView2D } from './components/hud/ListView2D';
 import { HealthMetricsView } from './components/hud/HealthMetricsView';
 import { WeeklyBriefView } from './components/hud/WeeklyBriefView';
 import { ConnectRepoModal } from './components/hud/ConnectRepoModal';
+import { GitHubAuthModal } from './components/hud/GitHubAuthModal';
 import { Sparkles } from 'lucide-react';
 import './App.css';
 
@@ -25,14 +26,60 @@ export default function App() {
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [activeView, setActiveView] = useState('3d');
   const [isConnectOpen, setIsConnectOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
   const [feedbackMap, setFeedbackMap] = useState({});
   const [toastMsg, setToastMsg] = useState(null);
 
+  // Authentication State
+  const [user, setUser] = useState(null);
+  const [sessionToken, setSessionToken] = useState(() => localStorage.getItem('repoguardian_session_token') || null);
+  const [rateLimit, setRateLimit] = useState(null);
+
   const showToast = (msg) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 4000);
+  };
+
+  // Restore authenticated session on mount
+  useEffect(() => {
+    async function checkAuth() {
+      const storedToken = localStorage.getItem('repoguardian_session_token');
+      const { data } = await api.authCurrentUser(storedToken);
+      if (data?.authenticated && data?.user) {
+        setUser(data.user);
+        if (data.session_token) {
+          setSessionToken(data.session_token);
+          localStorage.setItem('repoguardian_session_token', data.session_token);
+        }
+        if (data.rate_limit) {
+          setRateLimit(data.rate_limit);
+        }
+      }
+    }
+    checkAuth();
+  }, []);
+
+  const handleAuthSuccess = (authData) => {
+    setUser(authData.user);
+    if (authData.sessionToken) {
+      setSessionToken(authData.sessionToken);
+      localStorage.setItem('repoguardian_session_token', authData.sessionToken);
+    }
+    if (authData.rateLimit) {
+      setRateLimit(authData.rateLimit);
+    }
+    showToast(`Authenticated as @${authData.user.login} (${authData.isDemo ? 'Demo Mode' : 'PAT'})`);
+    refreshData();
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    setSessionToken(null);
+    setRateLimit(null);
+    localStorage.removeItem('repoguardian_session_token');
+    showToast('Signed out of GitHub session');
   };
 
   // Load health, issues, and monitor loop status
@@ -194,6 +241,9 @@ export default function App() {
         onCheckNow={handleCheckNow}
         isChecking={isChecking}
         onOpenConnect={() => setIsConnectOpen(true)}
+        onOpenAuth={() => setIsAuthOpen(true)}
+        user={user}
+        rateLimit={rateLimit}
         issuesCount={issues.length}
         escalatedCount={escalatedCount}
       />
@@ -278,6 +328,19 @@ export default function App() {
         isOpen={isConnectOpen}
         onClose={() => setIsConnectOpen(false)}
         onConnected={handleRepoConnected}
+        user={user}
+        sessionToken={sessionToken}
+      />
+
+      {/* GitHub Authentication & User Profile Modal */}
+      <GitHubAuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        user={user}
+        sessionToken={sessionToken}
+        rateLimit={rateLimit}
+        onAuthSuccess={handleAuthSuccess}
+        onLogout={handleLogout}
       />
     </div>
   );

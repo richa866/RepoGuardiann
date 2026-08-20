@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -296,3 +297,107 @@ def set_sync_state(
     values.append(repo)
     with tx() as c:
         c.execute(f"UPDATE repos SET {', '.join(fields)} WHERE repo = ?", values)
+
+
+# ==============================================================================
+# Users & Sessions Management
+# ==============================================================================
+
+def upsert_user(github_data: dict, token_preview: str | None = None) -> dict:
+    """Insert or update user record from GitHub API user profile payload."""
+    now = now_iso()
+    github_id = github_data.get("id")
+    login = github_data.get("login") or ""
+    name = github_data.get("name")
+    avatar_url = github_data.get("avatar_url")
+    email = github_data.get("email")
+    html_url = github_data.get("html_url")
+    bio = github_data.get("bio")
+    company = github_data.get("company")
+    location = github_data.get("location")
+    public_repos = int(github_data.get("public_repos") or 0)
+    followers = int(github_data.get("followers") or 0)
+
+    with tx() as c:
+        c.execute(
+            """
+            INSERT INTO users (
+                github_id, login, name, avatar_url, email, html_url,
+                bio, company, location, public_repos, followers,
+                created_at, last_login_at, token_preview
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(login) DO UPDATE SET
+                github_id = excluded.github_id,
+                name = excluded.name,
+                avatar_url = excluded.avatar_url,
+                email = excluded.email,
+                html_url = excluded.html_url,
+                bio = excluded.bio,
+                company = excluded.company,
+                location = excluded.location,
+                public_repos = excluded.public_repos,
+                followers = excluded.followers,
+                last_login_at = excluded.last_login_at,
+                token_preview = COALESCE(excluded.token_preview, users.token_preview)
+            """,
+            (
+                github_id, login, name, avatar_url, email, html_url,
+                bio, company, location, public_repos, followers,
+                now, now, token_preview
+            ),
+        )
+        row = c.execute("SELECT * FROM users WHERE login = ?", (login,)).fetchone()
+        return dict(row) if row else {}
+
+
+def get_user_by_login(login: str) -> dict | None:
+    row = get_conn().execute("SELECT * FROM users WHERE login = ?", (login,)).fetchone()
+    return dict(row) if row else None
+
+
+def get_user_by_id(user_id: int) -> dict | None:
+    row = get_conn().execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def get_latest_user() -> dict | None:
+    row = get_conn().execute("SELECT * FROM users ORDER BY last_login_at DESC LIMIT 1").fetchone()
+    return dict(row) if row else None
+
+
+def create_session(user_id: int, github_token: str | None = None, session_token: str | None = None, expires_at: str | None = None) -> dict:
+    token = session_token or str(uuid.uuid4())
+    now = now_iso()
+    with tx() as c:
+        c.execute(
+            """
+            INSERT INTO sessions (session_token, user_id, github_token, created_at, expires_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (token, user_id, github_token, now, expires_at),
+        )
+        row = c.execute("SELECT * FROM sessions WHERE session_token = ?", (token,)).fetchone()
+        return dict(row) if row else {"session_token": token, "user_id": user_id}
+
+
+def get_session(session_token: str) -> dict | None:
+    row = get_conn().execute("SELECT * FROM sessions WHERE session_token = ?", (session_token,)).fetchone()
+    return dict(row) if row else None
+
+
+def get_session_user(session_token: str) -> tuple[dict | None, dict | None]:
+    """Returns (user_dict, session_dict) for a given session token."""
+    conn = get_conn()
+    s_row = conn.execute("SELECT * FROM sessions WHERE session_token = ?", (session_token,)).fetchone()
+    if not s_row:
+        return None, None
+    s_dict = dict(s_row)
+    u_row = conn.execute("SELECT * FROM users WHERE id = ?", (s_dict["user_id"],)).fetchone()
+    return (dict(u_row) if u_row else None), s_dict
+
+
+def delete_session(session_token: str) -> bool:
+    with tx() as c:
+        cur = c.execute("DELETE FROM sessions WHERE session_token = ?", (session_token,))
+        return cur.rowcount > 0
+

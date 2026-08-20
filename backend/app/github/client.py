@@ -285,6 +285,55 @@ class GitHubClient:
         resp.raise_for_status()
         return resp.json()
 
+    def get_authenticated_user(self) -> dict:
+        """Fetch the currently authenticated GitHub user profile."""
+        path = "/user"
+        data, headers = self.get(path)
+        scopes = [s.strip() for s in headers.get("X-OAuth-Scopes", "").split(",") if s.strip()]
+        if isinstance(data, dict):
+            data["oauth_scopes"] = scopes
+        return data
+
+    def list_user_repos(
+        self,
+        visibility: str = "all",
+        affiliation: str = "owner,collaborator,organization_member",
+        sort: str = "updated",
+        max_items: int = 100,
+    ) -> list[dict]:
+        """List repositories accessible to the authenticated user."""
+        path = "/user/repos"
+        params = {
+            "visibility": visibility,
+            "affiliation": affiliation,
+            "sort": sort,
+            "direction": "desc",
+        }
+        repos = []
+        for raw in self._paginate(path, params=params, max_items=max_items, per_page=50):
+            repos.append({
+                "id": raw.get("id"),
+                "name": raw.get("name"),
+                "full_name": raw.get("full_name"),
+                "private": bool(raw.get("private")),
+                "html_url": raw.get("html_url"),
+                "description": raw.get("description"),
+                "fork": bool(raw.get("fork")),
+                "stargazers_count": raw.get("stargazers_count", 0),
+                "open_issues_count": raw.get("open_issues_count", 0),
+                "language": raw.get("language"),
+                "updated_at": raw.get("updated_at"),
+                "permissions": raw.get("permissions", {}),
+            })
+        return repos
+
+    def get_rate_limit(self) -> dict:
+        """Fetch rate limit quota details for the current credentials."""
+        path = "/rate_limit"
+        data, _ = self.get(path)
+        return data
+
+
 
 # Module-level convenience functions using default environment configuration
 _default_client = GitHubClient()
