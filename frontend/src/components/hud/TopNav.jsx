@@ -10,7 +10,10 @@ import {
   Activity, 
   FileText, 
   Plus,
-  ChevronDown
+  ChevronDown,
+  User,
+  LogOut,
+  ExternalLink
 } from 'lucide-react';
 
 export function TopNav({
@@ -26,11 +29,15 @@ export function TopNav({
   repos = [],
   issuesCount = 0,
   escalatedCount = 0,
+  currentUser = null,
+  onLogout = null,
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [repoDropdownOpen, setRepoDropdownOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
   const mobileRef = useRef(null);
+  const userRef = useRef(null);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -40,6 +47,9 @@ export function TopNav({
       }
       if (mobileRef.current && !mobileRef.current.contains(event.target)) {
         setMobileMenuOpen(false);
+      }
+      if (userRef.current && !userRef.current.contains(event.target)) {
+        setUserDropdownOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -254,8 +264,84 @@ export function TopNav({
           title="Connect GitHub repository"
         >
           <Plus className="w-3.5 h-3.5 shrink-0" />
-          <span>Connect</span>
+          <span className="hidden sm:inline">Connect</span>
         </button>
+
+        {/* User Profile Avatar & Dropdown */}
+        {currentUser && (
+          <div className="relative shrink-0" ref={userRef}>
+            <button
+              onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+              className="flex items-center gap-1 p-0.5 sm:p-1 rounded-full bg-white/[0.04] hover:bg-white/10 border border-white/10 transition cursor-pointer"
+              title={`Signed in as @${currentUser.login || 'user'}`}
+            >
+              {currentUser.avatar_url ? (
+                <img
+                  src={currentUser.avatar_url}
+                  alt={currentUser.login}
+                  className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-zinc-800 object-cover"
+                />
+              ) : (
+                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-sky-500/20 text-sky-300 flex items-center justify-center font-mono text-xs font-bold">
+                  {currentUser.login?.charAt(0).toUpperCase() || 'U'}
+                </div>
+              )}
+            </button>
+
+            {userDropdownOpen && (
+              <div className="absolute top-full mt-2 right-0 w-64 rounded-2xl bg-zinc-950/95 border border-zinc-700 shadow-2xl backdrop-blur-2xl p-3 flex flex-col gap-2 z-50 animate-in fade-in zoom-in-95 duration-150 font-sans">
+                {/* User Info */}
+                <div className="flex items-center gap-2.5 pb-2 border-b border-white/10">
+                  {currentUser.avatar_url && (
+                    <img
+                      src={currentUser.avatar_url}
+                      alt={currentUser.login}
+                      className="w-9 h-9 rounded-full bg-zinc-800 object-cover"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-xs text-white truncate">
+                      {currentUser.name || currentUser.login}
+                    </div>
+                    <div className="text-[11px] font-mono text-zinc-400 truncate">
+                      @{currentUser.login}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Profile Link */}
+                {currentUser.html_url && (
+                  <a
+                    href={currentUser.html_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-mono text-zinc-300 hover:text-white hover:bg-white/5 transition"
+                  >
+                    <span className="flex items-center gap-2">
+                      <User className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>GitHub Profile</span>
+                    </span>
+                    <ExternalLink className="w-3 h-3 text-zinc-500" />
+                  </a>
+                )}
+
+                {/* Sign Out Action */}
+                {onLogout && (
+                  <button
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      onLogout();
+                    }}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-mono text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Sign Out</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

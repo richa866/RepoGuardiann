@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from './api';
+import { Dynamic3DLoginPage } from './components/auth/Dynamic3DLoginPage';
 import { SpaceLoadingScreen } from './components/intro/SpaceLoadingScreen';
 import { GitBranchGraph3D } from './components/3d/GitBranchGraph3D';
 import { GitTreeScene } from './components/3d/GitTreeScene';
@@ -15,8 +16,22 @@ import { Sparkles } from 'lucide-react';
 import './App.css';
 
 export default function App() {
-  // App lifecycle stages: 'loading' -> 'branch_viz' -> 'main'
-  const [appStage, setAppStage] = useState('loading');
+  // Auth state
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('repoguardian_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [sessionToken, setSessionToken] = useState(() => localStorage.getItem('repoguardian_token'));
+
+  // App lifecycle stages: 'login' -> 'loading' (Black Hole) -> 'branch_viz' -> 'main'
+  const [appStage, setAppStage] = useState(() => {
+    // If no authenticated session, start at 3D login page
+    return localStorage.getItem('repoguardian_token') ? 'loading' : 'login';
+  });
   const [isWarpTransitioning, setIsWarpTransitioning] = useState(false);
 
   const [health, setHealth] = useState(null);
@@ -150,9 +165,39 @@ export default function App() {
     showToast(`Switched active repository to ${newRepo}`);
   };
 
+  const handleLoginSuccess = (user, token) => {
+    setCurrentUser(user);
+    setSessionToken(token);
+    setAppStage('loading');
+    refreshData();
+    showToast(`Welcome to RepoGuardian Matrix, @${user?.login || 'maintainer'}!`);
+  };
+
+  const handleLogout = async () => {
+    if (sessionToken) {
+      await api.authLogout(sessionToken);
+    }
+    localStorage.removeItem('repoguardian_token');
+    localStorage.removeItem('repoguardian_user');
+    setCurrentUser(null);
+    setSessionToken(null);
+    setSelectedIssue(null);
+    setAppStage('login');
+    showToast('Signed out of RepoGuardian.');
+  };
+
   const escalatedCount = issues.filter((i) => i.latest_escalate).length;
 
-  // 1. Initial Space Loading Screen
+  // 1. Dynamic 3D Login Page
+  if (appStage === 'login') {
+    return (
+      <Dynamic3DLoginPage
+        onLoginSuccess={handleLoginSuccess}
+      />
+    );
+  }
+
+  // 2. Black Hole Singularity Loading Screen (Appears immediately after login)
   if (appStage === 'loading') {
     return (
       <SpaceLoadingScreen
@@ -162,7 +207,7 @@ export default function App() {
     );
   }
 
-  // 2. 3D Git Branch Graph Visualization (Initial Landing after Loading)
+  // 3. 3D Git Branch Graph Visualization (Initial Landing after Loading)
   if (appStage === 'branch_viz') {
     return (
       <div className="relative w-full max-w-full h-screen overflow-hidden bg-[#06090f]">
@@ -185,7 +230,7 @@ export default function App() {
     );
   }
 
-  // 3. Main RepoGuardian App (The Full Categorized 3D Triage Tree + HUD)
+  // 4. Main RepoGuardian App (The Full Categorized 3D Triage Tree + HUD)
   return (
     <div className="relative w-full max-w-full h-screen overflow-hidden bg-[#06090f] text-slate-100 font-sans select-none">
       {/* Red Shockwave Transition Out */}
@@ -207,6 +252,8 @@ export default function App() {
         onOpenConnect={() => setIsConnectOpen(true)}
         issuesCount={issues.length}
         escalatedCount={escalatedCount}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       />
 
       {/* Main View Area */}
@@ -298,6 +345,8 @@ export default function App() {
         isOpen={isConnectOpen}
         onClose={() => setIsConnectOpen(false)}
         onConnected={handleRepoConnected}
+        user={currentUser}
+        sessionToken={sessionToken}
       />
     </div>
   );

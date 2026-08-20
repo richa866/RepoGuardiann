@@ -59,6 +59,30 @@ export const api = {
   postComment: (number, body, repo) => call(client.post(`/issues/${number}/comment`, { body, repo })),
   addLabels: (number, labels, repo) => call(client.post(`/issues/${number}/labels`, { labels, repo })),
   closeIssue: (number, reason, comment, repo) => call(client.post(`/issues/${number}/close`, { reason, comment, repo })),
+
+  // GitHub Auth & User Session API
+  authVerifyToken: (token) => call(client.post("/api/auth/github/verify", { token })),
+  authCurrentUser: (sessionToken) =>
+    call(
+      client.get("/api/auth/user", {
+        headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
+      })
+    ),
+  authListUserRepos: (sessionToken, maxItems = 50) =>
+    call(
+      client.get("/api/auth/github/repos", {
+        params: { max_items: maxItems },
+        headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
+      })
+    ),
+  authGetOAuthUrl: () => call(client.get("/api/auth/github/oauth/url")),
+  authOAuthCallback: (code, state) => call(client.post("/api/auth/github/oauth/callback", { code, state })),
+  authLogout: (sessionToken) =>
+    call(
+      client.post("/api/auth/logout", null, {
+        headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
+      })
+    ),
 };
 
 export default api;

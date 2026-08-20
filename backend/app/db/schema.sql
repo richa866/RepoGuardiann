@@ -132,3 +132,32 @@ CREATE TABLE IF NOT EXISTS sync_meta (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    github_id INTEGER UNIQUE,
+    login TEXT NOT NULL UNIQUE,
+    name TEXT,
+    avatar_url TEXT,
+    email TEXT,
+    html_url TEXT,
+    bio TEXT,
+    company TEXT,
+    location TEXT,
+    public_repos INTEGER NOT NULL DEFAULT 0,
+    followers INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    last_login_at TEXT NOT NULL,
+    token_preview TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_users_login ON users(login);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    session_token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    github_token TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);

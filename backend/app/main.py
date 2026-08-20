@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app.api.auth import router as auth_router
 from app.api.feedback import router as feedback_router
 from app.api.health import router as health_router
 from app.api.health_trends import router as health_trends_router
@@ -75,6 +76,7 @@ app.add_middleware(
 # feedback_router ONLY -- it was previously also defined in issues_router,
 # and because FastAPI serves whichever matching route is registered first,
 # one copy silently shadowed the other. Keep it defined in exactly one place.
+app.include_router(auth_router)
 app.include_router(health_router)
 app.include_router(health_trends_router)
 app.include_router(issues_router)

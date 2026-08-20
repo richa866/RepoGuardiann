@@ -53,6 +53,8 @@ def _resolve_path(raw_path: str, base_dir: Path = REPO_ROOT) -> str:
 class Settings:
     github_token: str | None = field(default_factory=lambda: _env("GITHUB_TOKEN") or None)
     github_repo: str | None = field(default_factory=lambda: _env("TARGET_REPO") or _env("GITHUB_REPO") or None)
+    github_client_id: str | None = field(default_factory=lambda: _env("GITHUB_CLIENT_ID") or None)
+    github_client_secret: str | None = field(default_factory=lambda: _env("GITHUB_CLIENT_SECRET") or None)
     anthropic_api_key: str | None = field(default_factory=lambda: _env("ANTHROPIC_API_KEY") or None)
     gemini_api_key: str | None = field(default_factory=lambda: _env("GEMINI_API_KEY") or None)
     gemini_model: str = field(default_factory=lambda: _env("GEMINI_MODEL", "gemini-1.5-flash"))
