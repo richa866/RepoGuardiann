@@ -89,14 +89,14 @@ class Settings:
 
 settings = Settings()
 
-# Resolve data paths relative to backend dir so it works regardless of cwd.
+# Resolve data paths relative to repo root so it works regardless of cwd.
 _db_path = Path(settings.database_path)
 if not _db_path.is_absolute():
-    settings.database_path = str((BACKEND_DIR / _db_path).resolve())
+    settings.database_path = str((REPO_ROOT / _db_path).resolve())
 
 _chroma_path = Path(settings.chroma_path)
 if not _chroma_path.is_absolute():
-    settings.chroma_path = str((BACKEND_DIR / _chroma_path).resolve())
+    settings.chroma_path = str((REPO_ROOT / _chroma_path).resolve())
 
 Path(settings.database_path).parent.mkdir(parents=True, exist_ok=True)
 Path(settings.chroma_path).mkdir(parents=True, exist_ok=True)

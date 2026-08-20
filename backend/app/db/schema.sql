@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS comments (
     github_comment_id INTEGER,
     author TEXT,
     body TEXT,
-    created_at TEXT
+    created_at TEXT,
+    is_maintainer INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_comments_issue ON comments(repo, issue_number);
 

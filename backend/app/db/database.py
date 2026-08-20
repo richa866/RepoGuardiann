@@ -18,16 +18,15 @@ SCHEMA_FILE = Path(__file__).resolve().parent / "schema.sql"
 
 def get_db_path() -> str:
     """Resolve database path from environment variable or default."""
+    repo_root = Path(__file__).resolve().parent.parent.parent.parent
     env_path = os.getenv("DB_PATH") or os.getenv("DATABASE_PATH")
     if env_path:
         p = Path(env_path)
         if not p.is_absolute():
-            backend_dir = Path(__file__).resolve().parent.parent.parent
-            p = (backend_dir / p).resolve()
+            p = (repo_root / p).resolve()
         p.parent.mkdir(parents=True, exist_ok=True)
         return str(p)
 
-    repo_root = Path(__file__).resolve().parent.parent.parent.parent
     default_path = repo_root / "data" / "repoguardian.db"
     default_path.parent.mkdir(parents=True, exist_ok=True)
     return str(default_path)
@@ -71,6 +70,10 @@ def init_db(db_path: str | None = None) -> sqlite3.Connection:
         raise FileNotFoundError(f"schema.sql not found at {SCHEMA_FILE}")
 
     conn.executescript(schema_sql)
+    try:
+        conn.execute("ALTER TABLE comments ADD COLUMN is_maintainer INTEGER NOT NULL DEFAULT 0;")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     return conn
 
@@ -146,9 +149,9 @@ def replace_comments(repo: str, issue_number: int, comments: list[dict]) -> None
     with tx() as c:
         c.execute("DELETE FROM comments WHERE repo = ? AND issue_number = ?", (repo, issue_number))
         c.executemany(
-            "INSERT INTO comments (repo, issue_number, github_comment_id, author, body, created_at) "
-            "VALUES (:repo, :issue_number, :github_comment_id, :author, :body, :created_at)",
-            [{**cm, "repo": repo, "issue_number": issue_number} for cm in comments],
+            "INSERT INTO comments (repo, issue_number, github_comment_id, author, body, created_at, is_maintainer) "
+            "VALUES (:repo, :issue_number, :github_comment_id, :author, :body, :created_at, :is_maintainer)",
+            [{**cm, "repo": repo, "issue_number": issue_number, "is_maintainer": int(cm.get("is_maintainer", 0))} for cm in comments],
         )
 
 
