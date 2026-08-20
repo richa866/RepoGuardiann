@@ -14,12 +14,13 @@ def find_similar(
     top_k: int = 5,
     exclude_number: int | None = None,
 ) -> list[dict]:
-    coll = get_collection(repo)
+    coll = get_collection()
     if coll.count() == 0:
         return []
 
     n_results = min(top_k + (1 if exclude_number is not None else 0), coll.count())
-    res = coll.query(query_texts=[query_text], n_results=n_results)
+    where_filter = {"repo": repo} if repo else None
+    res = coll.query(query_texts=[query_text], n_results=n_results, where=where_filter)
 
     matches: list[dict] = []
     if not res or not res["ids"] or not res["ids"][0]:
