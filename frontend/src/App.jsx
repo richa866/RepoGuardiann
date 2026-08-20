@@ -194,6 +194,7 @@ export default function App() {
               selectedIssue={selectedIssue}
               onSelectIssue={setSelectedIssue}
               feedbackMap={feedbackMap}
+              onFeedbackSubmitted={handleFeedbackSubmitted}
               fallback={
                 <ListView2D
                   issues={issues}

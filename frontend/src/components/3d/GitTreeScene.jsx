@@ -20,8 +20,13 @@ import {
   Pause,
   ChevronLeft,
   ChevronRight,
-  Layers
+  Layers,
+  X,
+  Sparkles,
+  Check,
+  Zap
 } from 'lucide-react';
+import api from '../../api';
 
 class ErrorBoundary3D extends Component {
   constructor(props) {
@@ -907,7 +912,7 @@ function SceneContent({
   );
 }
 
-export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedbackMap = {}, fallback }) {
+export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedbackMap = {}, onFeedbackSubmitted, fallback }) {
   const controlsRef = useRef();
   const isUserInteracting = useRef(false);
   const [activeFilter, setActiveFilter] = useState('all');
@@ -994,6 +999,44 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
     return map;
   }, [augmentedIssues]);
 
+  // Cinematic Triage Autopilot Tour Stations
+  const TOUR_STATIONS = useMemo(() => [
+    { filter: 'security_urgent', title: 'Security & Urgent Vulnerabilities', description: 'Inspecting high-severity RCE, directory traversal, and memory leaks.' },
+    { filter: 'regression', title: 'Historical Regressions', description: 'Investigating breaking changes and backward compatibility violations.' },
+    { filter: 'contentious', title: 'Contentious Architecture Debates', description: 'Reviewing 20+ comment threads requiring maintainer consensus.' },
+    { filter: 'needs_info', title: 'Missing Information & Reproduction Code', description: 'Reviewing automatically drafted reproduction requests.' },
+    { filter: 'duplicates', title: 'Semantic Duplicates (RAG)', description: 'Auditing 85%+ cosine similarity matches with Chroma embeddings.' },
+    { filter: 'all', title: 'Global Repository Constellation', description: 'Complete 3D issue triage matrix overview.' },
+  ], []);
+
+  const [tourActive, setTourActive] = useState(false);
+  const [tourIndex, setTourIndex] = useState(0);
+  const [tourPaused, setTourPaused] = useState(false);
+
+  // Tour Auto-Advancement Effect
+  useEffect(() => {
+    if (!tourActive || tourPaused) return;
+
+    const currentStation = TOUR_STATIONS[tourIndex];
+    if (currentStation) {
+      setActiveFilter(currentStation.filter);
+      if (currentStation.filter !== 'all') {
+        const firstInCat = augmentedIssues.find((i) =>
+          matchesCategory(i.latest_categories || [], currentStation.filter)
+        );
+        if (firstInCat) onSelectIssue(firstInCat);
+      } else {
+        onSelectIssue(null);
+      }
+    }
+
+    const timer = setTimeout(() => {
+      setTourIndex((prev) => (prev + 1) % TOUR_STATIONS.length);
+    }, 6000);
+
+    return () => clearTimeout(timer);
+  }, [tourActive, tourIndex, tourPaused, augmentedIssues, onSelectIssue, TOUR_STATIONS]);
+
   // Stepping Navigation
   const handleNextNode = useCallback(() => {
     if (visibleIssues.length === 0) return;
@@ -1008,12 +1051,29 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
   }, [visibleIssues, currentIndex, onSelectIssue]);
 
   const handleResetView = useCallback(() => {
+    setTourActive(false);
     onSelectIssue(null);
     setActiveFilter('all');
     setViewPreset('3d');
     setIsAutoRotating(false);
     setResetTrigger((prev) => prev + 1);
   }, [onSelectIssue]);
+
+  const handleBatchConfirm = useCallback(() => {
+    if (!onFeedbackSubmitted || visibleIssues.length === 0) return;
+    visibleIssues.forEach((issue) => {
+      onFeedbackSubmitted(issue.number, 'up');
+      api.submitFeedback(issue.number, { vote: 'up', repo: issue.repo });
+    });
+  }, [visibleIssues, onFeedbackSubmitted]);
+
+  const handleBatchOverride = useCallback(() => {
+    if (!onFeedbackSubmitted || visibleIssues.length === 0) return;
+    visibleIssues.forEach((issue) => {
+      onFeedbackSubmitted(issue.number, 'down');
+      api.submitFeedback(issue.number, { vote: 'down', repo: issue.repo });
+    });
+  }, [visibleIssues, onFeedbackSubmitted]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -1055,6 +1115,48 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
 
   return (
     <div className="w-full h-full relative select-none">
+      {/* Cinematic Triage Autopilot Tour Top HUD Banner */}
+      {tourActive && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-40 pointer-events-auto flex items-center gap-3.5 px-5 py-3 rounded-2xl bg-black/90 border border-sky-400/40 shadow-[0_0_40px_rgba(56,189,248,0.3)] backdrop-blur-3xl animate-in slide-in-from-top-4 font-mono text-xs text-white max-w-xl">
+          <div className="p-2 rounded-xl bg-sky-500/20 text-sky-300 border border-sky-500/40 animate-pulse">
+            <Compass className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sky-300 uppercase tracking-wider text-[10px]">
+                Cinematic Triage Autopilot • Station {tourIndex + 1}/{TOUR_STATIONS.length}
+              </span>
+            </div>
+            <div className="text-white font-bold text-sm font-sans truncate">{TOUR_STATIONS[tourIndex]?.title}</div>
+            <div className="text-zinc-400 text-[11px] font-sans truncate">{TOUR_STATIONS[tourIndex]?.description}</div>
+          </div>
+
+          <div className="flex items-center gap-1.5 ml-2 border-l border-white/10 pl-3 shrink-0">
+            <button
+              onClick={() => setTourPaused((p) => !p)}
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+              title={tourPaused ? "Resume Tour" : "Pause Tour"}
+            >
+              {tourPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              onClick={() => setTourIndex((i) => (i + 1) % TOUR_STATIONS.length)}
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+              title="Next Station"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setTourActive(false)}
+              className="p-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition cursor-pointer"
+              title="Exit Tour"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Dynamic Vertical Pill-Shaped Filter Slider on Right Flank */}
       <DynamicFilterRibbon
         activeFilter={activeFilter}
@@ -1095,24 +1197,65 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
           >
             <ChevronRight className="w-4 h-4" />
           </button>
+
+          {/* Cluster Batch Sweep Actions */}
+          {activeFilter !== 'all' && (
+            <div className="flex items-center gap-1 ml-1 pl-2 border-l border-white/10">
+              <button
+                onClick={handleBatchConfirm}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition cursor-pointer"
+                title={`Confirm all ${visibleIssues.length} issues in this cluster`}
+              >
+                <Check className="w-3 h-3 text-emerald-400" />
+                <span>Confirm All ({visibleIssues.length})</span>
+              </button>
+
+              <button
+                onClick={handleBatchOverride}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-mono text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition cursor-pointer"
+                title={`Override all ${visibleIssues.length} issues in this cluster`}
+              >
+                <X className="w-3 h-3 text-amber-400" />
+                <span>Override Cluster</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Bottom-Left Controls Dock: Reset View, 2D Plan View & Auto-Orbit */}
+      {/* Bottom-Left Controls Dock: Reset View, Tour, 2D Plan View & Auto-Orbit */}
       <div className="fixed bottom-6 left-6 z-40 pointer-events-auto flex items-center gap-2">
         <button
           onClick={handleResetView}
-          className="group flex items-center gap-2 px-3.5 py-2 rounded-full bg-black/60 hover:bg-black/90 border border-white/10 hover:border-white/30 shadow-2xl backdrop-blur-3xl transition-all duration-200 text-xs font-mono text-zinc-300 hover:text-white active:scale-95"
+          className="group flex items-center gap-2 px-3.5 py-2 rounded-full bg-black/60 hover:bg-black/90 border border-white/10 hover:border-white/30 shadow-2xl backdrop-blur-3xl transition-all duration-200 text-xs font-mono text-zinc-300 hover:text-white active:scale-95 cursor-pointer"
           title="Reset 3D camera to default overview (Esc)"
         >
           <RotateCcw className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white group-hover:-rotate-90 transition-all duration-300" />
           <span className="font-medium">Reset</span>
         </button>
 
+        {/* Cinematic Triage Tour Trigger */}
+        <button
+          onClick={() => {
+            setTourActive(true);
+            setTourIndex(0);
+            setTourPaused(false);
+          }}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full border shadow-2xl backdrop-blur-3xl transition-all duration-200 text-xs font-mono font-bold cursor-pointer active:scale-95 ${
+            tourActive
+              ? 'bg-sky-500 text-black border-sky-400 shadow-[0_0_20px_rgba(56,189,248,0.5)]'
+              : 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border-sky-400/40 hover:border-sky-400/60 shadow-[0_0_15px_rgba(56,189,248,0.2)]'
+          }`}
+          title="Start Cinematic Triage Tour across all clusters"
+        >
+          <Compass className="w-3.5 h-3.5" />
+          <span>Triage Tour</span>
+        </button>
+
         {/* View Preset Toggle: 3D Perspective vs Top 2D Plan */}
         <button
           onClick={() => setViewPreset((prev) => (prev === '3d' ? 'top' : '3d'))}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-full border shadow-2xl backdrop-blur-3xl transition-all duration-200 text-xs font-mono ${
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-full border shadow-2xl backdrop-blur-3xl transition-all duration-200 text-xs font-mono cursor-pointer ${
             viewPreset === 'top'
               ? 'bg-white text-black border-white'
               : 'bg-black/60 hover:bg-black/90 text-zinc-300 hover:text-white border-white/10 hover:border-white/30'
@@ -1126,7 +1269,7 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
         {/* Cinematic Auto-Orbit Turntable Toggle */}
         <button
           onClick={() => setIsAutoRotating((prev) => !prev)}
-          className={`p-2 rounded-full border shadow-2xl backdrop-blur-3xl transition-all duration-200 ${
+          className={`p-2 rounded-full border shadow-2xl backdrop-blur-3xl transition-all duration-200 cursor-pointer ${
             isAutoRotating
               ? 'bg-sky-500/20 text-sky-300 border-sky-400/50 shadow-sky-500/20'
               : 'bg-black/60 hover:bg-black/90 text-zinc-400 hover:text-white border-white/10 hover:border-white/30'

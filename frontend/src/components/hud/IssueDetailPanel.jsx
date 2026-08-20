@@ -26,6 +26,7 @@ import {
   Loader2
 } from 'lucide-react';
 import api from '../../api';
+import { RAGDiffModal } from './RAGDiffModal';
 
 export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedbackMap = {} }) {
   const [detail, setDetail] = useState(null);
@@ -37,6 +38,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
   const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [overrideReason, setOverrideReason] = useState('False Positive');
   const [customNote, setCustomNote] = useState('');
+  const [selectedRAGMatch, setSelectedRAGMatch] = useState(null);
 
   // 1-Click Action states
   const [postingComment, setPostingComment] = useState(false);
@@ -377,8 +379,16 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
                       </p>
                     )}
 
-                    {/* 1-Click Close as Duplicate Action */}
-                    <div className="flex items-center justify-end pt-1">
+                    {/* Actions: Side-by-Side Diff & 1-Click Close */}
+                    <div className="flex items-center justify-end gap-2 pt-1 flex-wrap">
+                      <button
+                        onClick={() => setSelectedRAGMatch(match)}
+                        className="flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/10 transition cursor-pointer"
+                      >
+                        <Search className="w-3 h-3 text-purple-400" />
+                        <span>Side-by-Side Diff</span>
+                      </button>
+
                       <button
                         onClick={() => handleCloseDuplicate(match.number)}
                         disabled={closingIssue || issueClosed}
@@ -391,7 +401,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
                         ) : (
                           <Lock className="w-3 h-3 text-purple-400" />
                         )}
-                        <span>{issueClosed ? 'Closed as Duplicate' : `Close as Duplicate of #${match.number}`}</span>
+                        <span>{issueClosed ? 'Closed' : `Close as #${match.number}`}</span>
                       </button>
                     </div>
                   </div>
@@ -539,6 +549,17 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
           </div>
         )}
       </div>
+
+      {/* RAG Semantic Duplicate Diff Modal */}
+      {selectedRAGMatch && (
+        <RAGDiffModal
+          currentIssue={issue}
+          matchedIssue={selectedRAGMatch}
+          onClose={() => setSelectedRAGMatch(null)}
+          onCloseAsDuplicate={handleCloseDuplicate}
+          onOverride={(num, reason) => handleFeedback('down', reason)}
+        />
+      )}
     </aside>
   );
 }
