@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import datetime, timezone
 
 from app.db.database import get_conn
-from app.rag.retrieval import find_similar
+from app.llm import synthesize_json
+from app.rag.retrieval import find_similar, get_decision_context
+
+logger = logging.getLogger("repoguardian.agent.tools")
 
 # Calibrated against real httpie/cli data (100 issues, see backend/scripts/test_rag.py),
 # not guessed. 0.80 was too strict: it missed real duplicate PR clusters that use
@@ -104,6 +108,12 @@ def duplicate_check(repo: str, issue_number: int, top_k: int = 5) -> dict:
             "is_possible_regression": is_regr,
         })
 
+    # Only worth the extra comment lookups for issues actually worth citing --
+    # not every low-similarity match belongs in an evidence-backed explanation.
+    notable_numbers = [m["number"] for m in matches if m["is_likely_duplicate"] or m["is_possible_regression"]]
+    decision_context = get_decision_context(repo, notable_numbers) if notable_numbers else []
+    max_similarity = max((m["similarity"] for m in matches), default=0.0)
+
     return {
         "repo": repo,
         "issue_number": issue_number,
@@ -111,6 +121,8 @@ def duplicate_check(repo: str, issue_number: int, top_k: int = 5) -> dict:
         "is_possible_regression": has_regression,
         "threshold_used": DUPLICATE_SIMILARITY_THRESHOLD,
         "matches": matches,
+        "decision_context": decision_context,
+        "max_similarity": max_similarity,
     }
 
 
@@ -202,11 +214,11 @@ def staleness_check(repo: str, issue_number: int) -> dict:
     }
 
 
-def missing_info_check(repo: str, issue_number: int) -> dict:
-    issue = _load_issue(repo, issue_number)
-    if not issue:
-        return {"error": f"issue #{issue_number} not found in {repo}", "is_missing_info": False}
-
+def _heuristic_missing_info_check(issue: dict) -> dict:
+    """Keyword-based fallback used only when the Gemini call fails or is
+    unavailable. Cheap and always available, but blunt: it can't tell "no
+    steps to reproduce yet" from an actual reproduction section, and only
+    recognizes bug reports that contain the literal word "bug"."""
     body = (issue.get("body") or "").lower()
     title = issue.get("title", "").lower()
 
@@ -215,9 +227,9 @@ def missing_info_check(repo: str, issue_number: int) -> dict:
     has_env = any(k in body for k in ["os", "version", "python", "node", "environment", "browser", "commit", "build"])
 
     is_missing = is_bug and (not has_repro or not has_env)
+    missing_parts = []
     drafted = None
     if is_missing:
-        missing_parts = []
         if not has_repro:
             missing_parts.append("minimal reproduction steps / expected vs actual behavior")
         if not has_env:
@@ -228,13 +240,69 @@ def missing_info_check(repo: str, issue_number: int) -> dict:
         )
 
     return {
-        "repo": repo,
-        "issue_number": issue_number,
         "is_bug_report": is_bug,
         "has_reproduction_steps": has_repro,
         "has_environment_details": has_env,
         "is_missing_info": is_missing,
+        "missing": missing_parts,
         "drafted_comment": drafted,
+    }
+
+
+def missing_info_check(repo: str, issue_number: int) -> dict:
+    issue = _load_issue(repo, issue_number)
+    if not issue:
+        return {"error": f"issue #{issue_number} not found in {repo}", "is_missing_info": False}
+
+    prompt = f"""You are triaging a GitHub issue to judge whether it has enough
+information for a maintainer to act on it.
+
+Issue #{issue_number}: {issue['title']}
+State: {issue.get('state')}
+Labels: {issue.get('labels')}
+Body:
+{(issue.get('body') or '')[:1500]}
+
+Judge for yourself whether this reads as a bug report (not a feature request,
+question, or docs/proposal) -- don't rely on the word "bug" appearing
+literally anywhere. If it is a bug report, judge whether it actually contains
+real reproduction steps (the phrase "no steps to reproduce yet" does NOT
+count as having them) and real environment details (OS, version, browser,
+dependency versions, etc).
+
+Respond with a JSON object:
+{{
+  "is_bug_report": true or false,
+  "has_reproduction_steps": true or false,
+  "has_environment_details": true or false,
+  "is_missing_info": true or false,
+  "missing": ["short phrases naming what's missing, e.g. \\"reproduction steps\\", \\"environment details\\" -- empty if nothing is missing or this isn't a bug report"],
+  "drafted_comment": "a polite, specific maintainer follow-up comment asking for exactly what's missing, or null if nothing is missing"
+}}"""
+
+    try:
+        llm_resp = synthesize_json(prompt)
+        result = {
+            "is_bug_report": bool(llm_resp.get("is_bug_report", False)),
+            "has_reproduction_steps": bool(llm_resp.get("has_reproduction_steps", False)),
+            "has_environment_details": bool(llm_resp.get("has_environment_details", False)),
+            "is_missing_info": bool(llm_resp.get("is_missing_info", False)),
+            "missing": llm_resp.get("missing", []),
+            "drafted_comment": llm_resp.get("drafted_comment"),
+            "method": "gemini-llm",
+        }
+    except Exception as exc:
+        logger.info(
+            "LLM missing-info check unavailable or failed for %s#%s (%s); using heuristic fallback",
+            repo, issue_number, exc,
+        )
+        result = _heuristic_missing_info_check(issue)
+        result["method"] = "heuristic-fallback"
+
+    return {
+        "repo": repo,
+        "issue_number": issue_number,
+        **result,
     }
 
 
