@@ -154,7 +154,7 @@ export default function App() {
   // 2. 3D Git Branch Graph Visualization (Initial Landing after Loading)
   if (appStage === 'branch_viz') {
     return (
-      <div className="relative w-screen h-screen overflow-hidden bg-[#06090f]">
+      <div className="relative w-full max-w-full h-screen overflow-hidden bg-[#06090f]">
         <GitBranchGraph3D
           key={`branch-viz-${health?.active_repo || 'default'}`}
           activeRepo={health?.active_repo || 'demo/repoguardian-seed'}
@@ -176,7 +176,7 @@ export default function App() {
 
   // 3. Main RepoGuardian App (The Full Categorized 3D Triage Tree + HUD)
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#06090f] text-slate-100 font-sans select-none">
+    <div className="relative w-full max-w-full h-screen overflow-hidden bg-[#06090f] text-slate-100 font-sans select-none">
       {/* Red Shockwave Transition Out */}
       {isWarpTransitioning && (
         <div className="fixed inset-0 z-50 bg-red-600/30 backdrop-blur-xl animate-fade-out pointer-events-none" />

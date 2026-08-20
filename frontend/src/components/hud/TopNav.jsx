@@ -46,44 +46,45 @@ export function TopNav({
   }, []);
 
   const views = [
-    { id: '3d', label: '3D Triage', icon: Layers },
-    { id: 'topology', label: 'Git Branches', icon: Zap },
-    { id: 'list', label: '2D Table', icon: List },
-    { id: 'health', label: 'Health', icon: Activity },
-    { id: 'brief', label: 'Weekly Brief', icon: FileText },
+    { id: '3d', label: '3D Triage', short: '3D', icon: Layers },
+    { id: 'topology', label: 'Git Branches', short: 'Branches', icon: Zap },
+    { id: 'list', label: '2D Table', short: 'Table', icon: List },
+    { id: 'health', label: 'Health', short: 'Health', icon: Activity },
+    { id: 'brief', label: 'Weekly Brief', short: 'Brief', icon: FileText },
   ];
 
   const currentView = views.find(v => v.id === activeView) || views[0];
   const CurrentIcon = currentView.icon;
 
   return (
-    <header className="fixed top-3 sm:top-4 left-3 sm:left-6 right-3 sm:right-6 z-50 flex items-center justify-between gap-3 sm:gap-6 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-full bg-black/60 border border-white/10 shadow-2xl backdrop-blur-3xl transition-all">
+    <header className="fixed top-2.5 sm:top-3.5 left-2 sm:left-4 md:left-6 right-2 sm:right-4 md:right-6 z-50 flex items-center justify-between gap-1.5 sm:gap-3 md:gap-4 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full bg-black/80 border border-white/10 shadow-2xl backdrop-blur-3xl transition-all max-w-[calc(100vw-1rem)] sm:max-w-[calc(100vw-2rem)] md:max-w-[calc(100vw-3rem)] mx-auto box-border">
+      
       {/* Brand & Repository Context (Left Cluster) */}
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
+      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 min-w-0">
         <GuardianLogo3D className="w-6 h-6 sm:w-7 sm:h-7 shrink-0 cursor-pointer" />
-        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
-          <span className="text-xs sm:text-sm font-semibold tracking-tight text-white font-sans shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+          <span className="text-xs sm:text-sm font-semibold tracking-tight text-white font-sans shrink-0 hidden sm:inline">
             RepoGuardian
           </span>
-          <span className="text-zinc-600 font-mono text-xs hidden sm:inline">/</span>
+          <span className="text-zinc-600 font-mono text-xs hidden md:inline shrink-0">/</span>
           
           {/* Active Repo Capsule */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setRepoDropdownOpen(!repoDropdownOpen)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] hover:bg-white/10 border border-white/10 hover:border-white/25 text-xs font-mono text-zinc-300 transition cursor-pointer"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-white/[0.04] hover:bg-white/10 border border-white/10 hover:border-white/25 text-xs font-mono text-zinc-300 transition cursor-pointer shrink-0"
               title="Click to switch active repository"
             >
               <GitBranch className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-              <span className="font-medium text-white truncate max-w-[80px] sm:max-w-[120px] md:max-w-[160px]">
+              <span className="font-medium text-white truncate max-w-[70px] xs:max-w-[95px] sm:max-w-[125px] md:max-w-[155px]">
                 {health?.active_repo || 'No repo'}
               </span>
-              <span className="text-zinc-600 hidden md:inline">•</span>
-              <span className="text-zinc-400 hidden md:inline">{issuesCount}</span>
+              <span className="text-zinc-600 hidden lg:inline">•</span>
+              <span className="text-zinc-400 hidden lg:inline">{issuesCount}</span>
               {escalatedCount > 0 && (
-                <span className="text-white font-medium flex items-center gap-1 shrink-0 ml-0.5">
+                <span className="text-white font-medium flex items-center gap-1 shrink-0 ml-0.5 hidden sm:inline-flex">
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                  <span className="text-zinc-300 hidden lg:inline">{escalatedCount}</span>
+                  <span className="text-zinc-300 hidden xl:inline">{escalatedCount}</span>
                 </span>
               )}
               <ChevronDown className="w-3 h-3 text-zinc-400 ml-0.5 shrink-0" />
@@ -137,8 +138,8 @@ export function TopNav({
         </div>
       </div>
 
-      {/* Center View Switcher (Desktop Segments - cleanly visible on xl/lg without overlap) */}
-      <nav className="hidden xl:flex items-center gap-1 p-1 rounded-full bg-white/[0.03] border border-white/10 shrink-0">
+      {/* Center View Switcher (Full Text on 2xl screens) */}
+      <nav className="hidden 2xl:flex items-center gap-1 p-1 rounded-full bg-white/[0.03] border border-white/10 shrink-0">
         {views.map((v) => {
           const Icon = v.icon;
           const isActive = activeView === v.id;
@@ -159,8 +160,8 @@ export function TopNav({
         })}
       </nav>
 
-      {/* Center View Switcher (Medium / Tablet Compact Icon Bar) */}
-      <nav className="hidden md:flex xl:hidden items-center gap-1 p-1 rounded-full bg-white/[0.03] border border-white/10 shrink-0">
+      {/* Center View Switcher (Compact Labels on lg to 2xl screens) */}
+      <nav className="hidden lg:flex 2xl:hidden items-center gap-1 p-1 rounded-full bg-white/[0.03] border border-white/10 shrink-0">
         {views.map((v) => {
           const Icon = v.icon;
           const isActive = activeView === v.id;
@@ -169,28 +170,28 @@ export function TopNav({
               key={v.id}
               onClick={() => onSelectView(v.id)}
               title={v.label}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-mono transition-all duration-200 ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-mono transition-all duration-200 ${
                 isActive
                   ? 'bg-white text-black font-semibold shadow-sm'
                   : 'text-zinc-400 hover:text-white hover:bg-white/[0.05]'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
-              <span className="hidden lg:inline">{v.label}</span>
+              <span>{v.short}</span>
             </button>
           );
         })}
       </nav>
 
-      {/* Center View Switcher (Mobile Dropdown) */}
-      <div className="md:hidden relative" ref={mobileRef}>
+      {/* Center View Switcher (Mobile / Tablet Compact Dropdown on < lg screens) */}
+      <div className="lg:hidden relative" ref={mobileRef}>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-xs font-mono text-white"
+          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full bg-white/10 border border-white/15 text-xs font-mono text-white shrink-0"
         >
-          <CurrentIcon className="w-3 h-3 text-sky-400" />
-          <span className="font-semibold">{currentView.label}</span>
-          <ChevronDown className="w-3 h-3 text-zinc-400" />
+          <CurrentIcon className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+          <span className="font-semibold">{currentView.short || currentView.label}</span>
+          <ChevronDown className="w-3 h-3 text-zinc-400 shrink-0" />
         </button>
 
         {mobileMenuOpen && (
@@ -220,37 +221,38 @@ export function TopNav({
         )}
       </div>
 
-      {/* Right Actions Cluster (Properly Spaced & Shrink-0) */}
-      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      {/* Right Actions Cluster (Guaranteed to fit on screen) */}
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
         {/* Sync Action */}
         <button
           onClick={onSync}
           disabled={isSyncing}
-          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-mono text-zinc-300 hover:text-white bg-white/[0.04] hover:bg-white/10 border border-white/10 transition"
+          className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full text-xs font-mono text-zinc-300 hover:text-white bg-white/[0.04] hover:bg-white/10 border border-white/10 transition shrink-0"
           title="Poll GitHub for updates"
         >
           <RotateCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-white' : 'text-zinc-400'}`} />
-          <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : 'Sync'}</span>
+          <span className="hidden md:inline">{isSyncing ? 'Syncing...' : 'Sync'}</span>
         </button>
 
         {/* Check Now Trigger */}
         <button
           onClick={onCheckNow}
           disabled={isChecking}
-          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-mono text-white bg-white/10 hover:bg-white/20 border border-white/20 transition shadow-sm"
+          className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full text-xs font-mono text-white bg-white/10 hover:bg-white/20 border border-white/20 transition shadow-sm shrink-0"
           title="Trigger agentic investigation"
         >
           <Zap className={`w-3.5 h-3.5 ${isChecking ? 'animate-bounce text-white' : 'text-zinc-300'}`} />
-          <span className="hidden sm:inline">{isChecking ? 'Checking...' : 'Check'}</span>
+          <span className="hidden md:inline">{isChecking ? 'Checking...' : 'Check'}</span>
         </button>
 
-        {/* Connect Repo Action */}
+        {/* Connect Repo Action (Always cleanly visible inside header) */}
         <button
           onClick={onOpenConnect}
-          className="flex items-center gap-1 px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-mono font-bold text-black bg-white hover:bg-zinc-200 transition shadow-md"
+          className="flex items-center gap-1 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-xs font-mono font-bold text-black bg-white hover:bg-zinc-200 transition shrink-0 shadow-md cursor-pointer"
+          title="Connect GitHub repository"
         >
-          <Plus className="w-3.5 h-3.5" />
-          <span className="hidden xs:inline">Connect</span>
+          <Plus className="w-3.5 h-3.5 shrink-0" />
+          <span>Connect</span>
         </button>
       </div>
     </header>
