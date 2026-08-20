@@ -114,6 +114,36 @@ def set_meta(key: str, value: str) -> None:
         )
 
 
+def start_monitor_run(repo: str) -> int:
+    """monitor_runs is the structured per-cycle audit trail (new/updated issue
+    counts, subtasks created, status) that GET /monitor/status is meant to
+    show -- distinct from monitor_log, which is just a flat event stream with
+    no counts. Call this at the start of a poll cycle, then finish_monitor_run
+    once it's known whether the cycle succeeded."""
+    with tx() as c:
+        cur = c.execute(
+            "INSERT INTO monitor_runs (repo, started_at, status) VALUES (?, ?, 'running')",
+            (repo, now_iso()),
+        )
+        return cur.lastrowid
+
+
+def finish_monitor_run(
+    run_id: int,
+    status: str,
+    new_issues: int = 0,
+    updated_issues: int = 0,
+    subtasks_created: int = 0,
+    error: str | None = None,
+) -> None:
+    with tx() as c:
+        c.execute(
+            "UPDATE monitor_runs SET finished_at = ?, status = ?, new_issues_count = ?, "
+            "updated_issues_count = ?, subtasks_created_count = ?, error = ? WHERE id = ?",
+            (now_iso(), status, new_issues, updated_issues, subtasks_created, error, run_id),
+        )
+
+
 def get_active_repo() -> str | None:
     return get_meta("active_repo")
 
@@ -177,11 +207,15 @@ def enqueue_subtask(
     task_type: str,
     issue_number: int | None = None,
     issue_updated_at: str | None = None,
-) -> int:
+) -> tuple[int, bool]:
     """Idempotent: re-polling the same unchanged issue (or re-triggering a repo-wide
     check within the same UTC day) is a no-op instead of piling up duplicate rows.
-    Returns the id of the queued subtask -- either the one just inserted, or the
-    existing one that made this call a no-op.
+    Returns (id, created) -- id of the queued subtask (either the one just
+    inserted, or the existing one that made this call a no-op), and whether
+    this call actually inserted a new row. Callers counting "subtasks
+    created" for a summary/audit trail need created, not just an id -- an id
+    is returned either way, so counting calls instead of checking created
+    silently overcounts by the number of no-op dedupe hits.
 
     dedupe_key is always computed here, never accepted from the caller -- an
     earlier version of this on another branch defaulted to
@@ -204,8 +238,8 @@ def enqueue_subtask(
             existing = c.execute(
                 "SELECT id FROM subtasks WHERE dedupe_key = ?", (dedupe_key,)
             ).fetchone()
-            return existing["id"] if existing else -1
-        return cur.lastrowid
+            return (existing["id"] if existing else -1), False
+        return cur.lastrowid, True
 
 
 def upsert_repo(repo: str, token: str | None) -> None:

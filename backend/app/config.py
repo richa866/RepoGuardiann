@@ -51,7 +51,7 @@ class Settings:
     gemini_model: str = field(default_factory=lambda: _env("GEMINI_MODEL", "gemini-1.5-flash"))
     embedding_model: str = field(default_factory=lambda: _env("EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
     monitor_poll_interval_seconds: int = field(
-        default_factory=lambda: int(_env("POLL_INTERVAL_SECONDS") or _env("MONITOR_POLL_INTERVAL_SECONDS", "300"))
+        default_factory=lambda: int(_env("POLL_INTERVAL_SECONDS") or _env("MONITOR_POLL_INTERVAL_SECONDS", "90"))
     )
     connect_sync_max_items: int = field(
         default_factory=lambda: int(_env("CONNECT_SYNC_MAX_ITEMS", "30"))

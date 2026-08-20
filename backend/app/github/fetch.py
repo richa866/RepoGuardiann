@@ -164,6 +164,9 @@ def fetch_repository_data(
         open_count = 0
         closed_count = 0
         pr_count = 0
+        new_issue_count = 0
+        updated_issue_count = 0
+        subtasks_created_count = 0
 
         while fetched_count < max_items:
             per_page = min(100, max_items - fetched_count)
@@ -180,6 +183,12 @@ def fetch_repository_data(
 
             for raw_issue in raw_issues_page:
                 norm_issue = normalize_issue(raw_issue)
+                # upsert_issue only reports changed/unchanged, not new-vs-updated --
+                # check existence first so monitor_runs can report the two separately.
+                is_new = get_conn().execute(
+                    "SELECT 1 FROM issues WHERE repo = ? AND number = ?",
+                    (repo, norm_issue["number"]),
+                ).fetchone() is None
                 changed = upsert_issue(repo, norm_issue)
                 fetched_count += 1
 
@@ -214,9 +223,14 @@ def fetch_repository_data(
                 # correctness (Chroma upsert is idempotent) but there's no reason to
                 # redo it either.
                 if changed:
+                    if is_new:
+                        new_issue_count += 1
+                    else:
+                        updated_issue_count += 1
                     embed_issue(repo=repo, issue=norm_issue, comments=issue_comments)
-                    enqueue_subtask(repo, "duplicate_check", norm_issue["number"], norm_issue["updated_at"])
-                    enqueue_subtask(repo, "missing_info_check", norm_issue["number"], norm_issue["updated_at"])
+                    _, created1 = enqueue_subtask(repo, "duplicate_check", norm_issue["number"], norm_issue["updated_at"])
+                    _, created2 = enqueue_subtask(repo, "missing_info_check", norm_issue["number"], norm_issue["updated_at"])
+                    subtasks_created_count += int(created1) + int(created2)
 
                 # Log one-line summary per issue processed
                 kind_str = "PR" if norm_issue["is_pr"] else "Issue"
@@ -243,7 +257,8 @@ def fetch_repository_data(
                 break
             page += 1
 
-        enqueue_subtask(repo, "health_trend_check", None)
+        _, health_created = enqueue_subtask(repo, "health_trend_check", None)
+        subtasks_created_count += int(health_created)
         set_meta(f"last_sync_{repo}", now_iso())
         set_sync_state(repo, status="done", stage="done", current=fetched_count, total=fetched_count)
         log_monitor_event(
@@ -255,6 +270,9 @@ def fetch_repository_data(
         summary = {
             "repo": repo,
             "fetched_issues": fetched_count,
+            "new_issues": new_issue_count,
+            "updated_issues": updated_issue_count,
+            "subtasks_created": subtasks_created_count,
             "open_issues": open_count,
             "closed_issues": closed_count,
             "pull_requests": pr_count,

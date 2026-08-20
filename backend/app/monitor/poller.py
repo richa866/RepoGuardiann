@@ -6,7 +6,15 @@ import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.config import settings
-from app.db.database import get_active_repo, get_conn, get_meta, get_repo_row, log_monitor_event
+from app.db.database import (
+    finish_monitor_run,
+    get_active_repo,
+    get_conn,
+    get_meta,
+    get_repo_row,
+    log_monitor_event,
+    start_monitor_run,
+)
 from app.github.fetch import run_sync
 from app.monitor.processor import process_pending_subtasks
 
@@ -28,11 +36,27 @@ def poll_cycle() -> None:
     token = row["token"] if row else None
     since = get_meta(f"last_sync_{active_repo}")
 
-    if settings.github_configured or token:
-        try:
-            run_sync(active_repo, token=token, since=since, max_items=50)
-        except Exception as exc:
-            logger.warning("[monitor] poll sync failed: %s", exc)
+    # No gate on settings.github_configured/token here -- GitHubClient works
+    # fine unauthenticated (60/hr limit) and public repos are the documented
+    # no-token path (.env.example: "public repos work with GITHUB_TOKEN left
+    # blank"). Gating on a token being present meant an active repo connected
+    # without one would silently never actually poll.
+    run_id = start_monitor_run(active_repo)
+    try:
+        result = run_sync(active_repo, token=token, since=since, max_items=50)
+        if result.get("status") == "error":
+            finish_monitor_run(run_id, status="failed", error=result.get("error"))
+        else:
+            finish_monitor_run(
+                run_id,
+                status="success",
+                new_issues=result.get("new_issues", 0),
+                updated_issues=result.get("updated_issues", 0),
+                subtasks_created=result.get("subtasks_created", 0),
+            )
+    except Exception as exc:
+        logger.warning("[monitor] poll sync failed: %s", exc)
+        finish_monitor_run(run_id, status="failed", error=str(exc))
 
     # Drain pending subtasks
     processed = process_pending_subtasks(active_repo, limit=20)

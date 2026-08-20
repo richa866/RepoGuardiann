@@ -39,34 +39,39 @@ def _count(repo: str, issue_number: int | None, task_type: str) -> int:
 
 
 def test_enqueue_subtask_is_idempotent_for_unchanged_issue(isolated_db):
-    id1 = database.enqueue_subtask("acme/repo", "duplicate_check", 42, "2026-01-01T00:00:00Z")
-    id2 = database.enqueue_subtask("acme/repo", "duplicate_check", 42, "2026-01-01T00:00:00Z")
+    id1, created1 = database.enqueue_subtask("acme/repo", "duplicate_check", 42, "2026-01-01T00:00:00Z")
+    id2, created2 = database.enqueue_subtask("acme/repo", "duplicate_check", 42, "2026-01-01T00:00:00Z")
 
     assert id1 == id2, "re-enqueuing the same (repo, issue, type, updated_at) must be a no-op"
+    assert created1 is True, "the first call is a genuine insert"
+    assert created2 is False, "the second call must report it did NOT create a row -- callers count this"
     assert _count("acme/repo", 42, "duplicate_check") == 1
 
 
 def test_enqueue_subtask_requeues_when_issue_actually_changed(isolated_db):
-    id1 = database.enqueue_subtask("acme/repo", "duplicate_check", 42, "2026-01-01T00:00:00Z")
-    id2 = database.enqueue_subtask("acme/repo", "duplicate_check", 42, "2026-01-02T00:00:00Z")
+    id1, created1 = database.enqueue_subtask("acme/repo", "duplicate_check", 42, "2026-01-01T00:00:00Z")
+    id2, created2 = database.enqueue_subtask("acme/repo", "duplicate_check", 42, "2026-01-02T00:00:00Z")
 
     assert id1 != id2, "a genuinely updated issue must get a fresh subtask, not be swallowed as a dup"
+    assert created1 is True and created2 is True, "both are genuine inserts -- the issue really did change"
     assert _count("acme/repo", 42, "duplicate_check") == 2
 
 
 def test_enqueue_subtask_dedupes_repo_wide_checks_within_the_same_day(isolated_db):
-    id1 = database.enqueue_subtask("acme/repo", "health_trend_check", None)
-    id2 = database.enqueue_subtask("acme/repo", "health_trend_check", None)
+    id1, created1 = database.enqueue_subtask("acme/repo", "health_trend_check", None)
+    id2, created2 = database.enqueue_subtask("acme/repo", "health_trend_check", None)
 
     assert id1 == id2, "repeated triggers within the same day shouldn't spam health_trend_check rows"
+    assert created1 is True and created2 is False
     assert _count("acme/repo", None, "health_trend_check") == 1
 
 
 def test_enqueue_subtask_keys_are_scoped_per_repo(isolated_db):
     """Same issue number in two different connected repos must not collide."""
-    id1 = database.enqueue_subtask("acme/repo-one", "duplicate_check", 42, "2026-01-01T00:00:00Z")
-    id2 = database.enqueue_subtask("acme/repo-two", "duplicate_check", 42, "2026-01-01T00:00:00Z")
+    id1, created1 = database.enqueue_subtask("acme/repo-one", "duplicate_check", 42, "2026-01-01T00:00:00Z")
+    id2, created2 = database.enqueue_subtask("acme/repo-two", "duplicate_check", 42, "2026-01-01T00:00:00Z")
 
     assert id1 != id2
+    assert created1 is True and created2 is True
     assert _count("acme/repo-one", 42, "duplicate_check") == 1
     assert _count("acme/repo-two", 42, "duplicate_check") == 1
