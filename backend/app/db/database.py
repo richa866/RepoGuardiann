@@ -53,10 +53,7 @@ def init_db() -> None:
         conn.commit()
         conn.execute("PRAGMA foreign_keys = ON")
 
-    if SCHEMA_FILE.exists():
-        schema_sql = SCHEMA_FILE.read_text()
-    else:
-        from app.database import SCHEMA as schema_sql  # fallback
+    schema_sql = SCHEMA_FILE.read_text()
     conn.executescript(schema_sql)
     conn.commit()
 

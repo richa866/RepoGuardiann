@@ -59,6 +59,7 @@ class Settings:
     )
     database_path: str = field(default_factory=lambda: _env("DATABASE_PATH", "./data/repoguardian.db"))
     chroma_path: str = field(default_factory=lambda: _env("CHROMA_PATH", "./data/chroma"))
+    embedding_model: str = field(default_factory=lambda: _env("EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
     log_level: str = field(default_factory=lambda: _env("LOG_LEVEL", "INFO"))
 
     @property

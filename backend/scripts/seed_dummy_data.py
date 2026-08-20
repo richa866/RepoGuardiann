@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.database import (
+from app.db.database import (
     enqueue_subtask,
     init_db,
     replace_comments,
@@ -179,10 +179,7 @@ def main():
         upsert_issue(DEMO_REPO, issue)
         comments = DUMMY_COMMENTS.get(issue["number"], [])
         replace_comments(DEMO_REPO, issue["number"], comments)
-        resolution = ""
-        if issue["number"] == 5:
-            resolution = "Fixed in v2.1, closed as duplicate tracking removed."
-        embed_issue(DEMO_REPO, issue["number"], issue["title"], issue["body"], issue["state"], resolution)
+        embed_issue(DEMO_REPO, issue, comments)
 
     for issue in DUMMY_ISSUES:
         enqueue_subtask(DEMO_REPO, "duplicate_check", issue["number"])
