@@ -10,7 +10,16 @@ import {
   Search, 
   MessageSquare, 
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Cpu,
+  ChevronDown,
+  ChevronUp,
+  Shield,
+  Activity,
+  Clock,
+  FileQuestion,
+  Users,
+  Flame
 } from 'lucide-react';
 import api from '../../api';
 
@@ -20,12 +29,17 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
   const [copiedDraft, setCopiedDraft] = useState(false);
   const [feedbackVote, setFeedbackVote] = useState(feedbackMap[issue?.number] || null);
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [showEvidence, setShowEvidence] = useState(false);
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('False Positive');
+  const [customNote, setCustomNote] = useState('');
 
   useEffect(() => {
     if (!issue) return;
     let isMounted = true;
     setLoading(true);
     setFeedbackVote(feedbackMap[issue.number] || null);
+    setShowOverrideModal(false);
 
     api.getIssue(issue.number, issue.repo).then(({ data }) => {
       if (isMounted) {
@@ -44,19 +58,35 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
   const evidence = latestEscalation?.evidence || {};
   const draftedComment = latestEscalation?.drafted_comment || evidence?.missing_info_check?.drafted_comment;
   const similarIssues = detail?.similar_issues || evidence?.duplicate_check?.matches || [];
+  const synthesisMethod = latestEscalation?.synthesis_method || 'deterministic';
+  const isGemini = synthesisMethod.includes('gemini');
 
-  async function handleFeedback(vote) {
+  // Diagnostic tool metrics extracted from evidence_json
+  const securityCheck = evidence?.security_check || {};
+  const duplicateCheck = evidence?.duplicate_check || {};
+  const missingInfoCheck = evidence?.missing_info_check || {};
+  const contentiousnessCheck = evidence?.contentiousness_check || {};
+  const responseTimeCheck = evidence?.response_time_check || {};
+  const stalenessCheck = evidence?.staleness_check || {};
+
+  async function handleFeedback(vote, note = null) {
     setSubmittingFeedback(true);
     setFeedbackVote(vote);
+    setShowOverrideModal(false);
+
     // Optimistic UI response for instantaneous 100% consistency across all nodes
     if (onFeedbackSubmitted) {
       onFeedbackSubmitted(issue.number, vote);
     }
-    await api.submitFeedback(issue.number, {
+
+    const payload = {
       vote,
       escalation_id: latestEscalation?.id,
+      note: note || (vote === 'down' ? overrideReason : null),
       repo: issue.repo,
-    });
+    };
+
+    await api.submitFeedback(issue.number, payload);
     setSubmittingFeedback(false);
   }
 
@@ -68,7 +98,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
   }
 
   return (
-    <aside className="fixed top-20 sm:top-24 right-3 sm:right-6 bottom-3 sm:bottom-6 z-50 w-[calc(100vw-1.5rem)] sm:w-[420px] max-w-lg rounded-3xl bg-black/95 border border-white/10 shadow-2xl backdrop-blur-3xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200 pointer-events-auto">
+    <aside className="fixed top-20 sm:top-24 right-3 sm:right-6 bottom-3 sm:bottom-6 z-50 w-[calc(100vw-1.5rem)] sm:w-[440px] max-w-lg rounded-3xl bg-black/95 border border-white/10 shadow-2xl backdrop-blur-3xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200 pointer-events-auto">
       {/* Header */}
       <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 border-b border-white/[0.08] bg-white/[0.02]">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -112,7 +142,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
           {issue.body && (
             <div className="space-y-1">
               <span className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">Issue Description</span>
-              <div className="text-xs text-zinc-300 font-mono leading-relaxed bg-white/[0.03] p-3 rounded-2xl border border-white/[0.06] max-h-48 overflow-y-auto whitespace-pre-wrap">
+              <div className="text-xs text-zinc-300 font-mono leading-relaxed bg-white/[0.03] p-3 rounded-2xl border border-white/[0.06] max-h-40 overflow-y-auto whitespace-pre-wrap">
                 {issue.body}
               </div>
             </div>
@@ -121,16 +151,26 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
 
         <div className="h-px bg-white/[0.06]" />
 
-        {/* AI Escalation Verdict */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
+        {/* AI Escalation Verdict Header with Synthesis Mode Pill */}
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-semibold uppercase tracking-wider font-mono text-white flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-sky-400" />
               Agentic Triage Verdict
             </span>
-            <span className="text-[10px] font-mono text-zinc-500">
-              {latestEscalation?.synthesis_method || 'deterministic'}
-            </span>
+            
+            {/* Synthesis Mode Badge: Gemini 2.5 Flash vs Rule-Based Engine */}
+            {isGemini ? (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1 shadow-sm">
+                <Sparkles className="w-3 h-3 text-purple-400" />
+                Gemini 2.5 Flash
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-white/5 text-zinc-400 border border-white/10 flex items-center gap-1">
+                <Cpu className="w-3 h-3 text-zinc-400" />
+                Rule Engine
+              </span>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-1.5">
@@ -153,6 +193,83 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
           </p>
         </div>
 
+        {/* Collapsible 6-Tool Diagnostic Evidence & Signals Inspector */}
+        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
+          <button
+            onClick={() => setShowEvidence((prev) => !prev)}
+            className="w-full px-3.5 py-2.5 flex items-center justify-between text-left hover:bg-white/[0.03] transition cursor-pointer"
+          >
+            <span className="text-[11px] font-semibold uppercase tracking-wider font-mono text-zinc-300 flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-sky-400" />
+              Tool Diagnostic Signals (6 Scanners)
+            </span>
+            {showEvidence ? (
+              <ChevronUp className="w-4 h-4 text-zinc-400" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-zinc-400" />
+            )}
+          </button>
+
+          {showEvidence && (
+            <div className="p-3 pt-1 border-t border-white/[0.06] space-y-2.5 font-mono text-[11px] bg-black/40">
+              {/* 1. Security Scanner */}
+              <div className="p-2 rounded-xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-3.5 h-3.5 text-rose-400" />
+                  <span className="text-zinc-300">Security Keywords:</span>
+                </div>
+                <span className="text-zinc-400">
+                  {securityCheck.keywords_found?.length ? securityCheck.keywords_found.join(', ') : 'None matched'}
+                </span>
+              </div>
+
+              {/* 2. RAG Semantic Duplicates */}
+              <div className="p-2 rounded-xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Search className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="text-zinc-300">RAG Vector Match:</span>
+                </div>
+                <span className="text-purple-300 font-bold">
+                  {similarIssues.length > 0 ? `${(similarIssues[0].similarity * 100).toFixed(1)}% match` : 'No duplicates'}
+                </span>
+              </div>
+
+              {/* 3. Missing Reproduction Info */}
+              <div className="p-2 rounded-xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileQuestion className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="text-zinc-300">Reproduction Info:</span>
+                </div>
+                <span className={missingInfoCheck.missing_repro ? 'text-amber-400 font-bold' : 'text-emerald-400'}>
+                  {missingInfoCheck.missing_repro ? 'Missing repro code' : 'Complete'}
+                </span>
+              </div>
+
+              {/* 4. Contentiousness & Debates */}
+              <div className="p-2 rounded-xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-zinc-300">Debate Velocity:</span>
+                </div>
+                <span className="text-zinc-400">
+                  {contentiousnessCheck.participant_count ? `${contentiousnessCheck.participant_count} participants` : `${issue.comments_count || 0} comments`}
+                </span>
+              </div>
+
+              {/* 5. Response Time Watchdog */}
+              <div className="p-2 rounded-xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-zinc-300">Maintainer SLA:</span>
+                </div>
+                <span className="text-zinc-400">
+                  {responseTimeCheck.hours_open ? `${responseTimeCheck.hours_open}h open` : 'Within SLA'}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Project-Aware RAG Matches */}
         {similarIssues.length > 0 && (
           <>
@@ -166,7 +283,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
                 <span className="text-[10px] text-zinc-500 font-mono">Chroma</span>
               </div>
 
-              <div className="space-y-2 max-h-40 overflow-y-auto">
+              <div className="space-y-2 max-h-36 overflow-y-auto">
                 {similarIssues.map((match) => (
                   <div
                     key={match.number}
@@ -211,7 +328,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
                   <span>{copiedDraft ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
-              <div className="text-zinc-300 font-mono text-xs bg-white/[0.03] p-3 rounded-2xl border border-white/[0.06] whitespace-pre-wrap leading-relaxed max-h-36 overflow-y-auto">
+              <div className="text-zinc-300 font-mono text-xs bg-white/[0.03] p-3 rounded-2xl border border-white/[0.06] whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
                 {draftedComment}
               </div>
             </div>
@@ -219,9 +336,60 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
         )}
       </div>
 
-      {/* Human Feedback Footer: Confirm / Override or Completed Status Tag */}
+      {/* Human Feedback Footer: Confirm / Override or Override Reason Modal */}
       <div className="p-3.5 sm:p-4 border-t border-white/[0.08] bg-white/[0.02]">
-        {feedbackVote === 'up' ? (
+        {showOverrideModal ? (
+          <div className="space-y-2.5 p-3 rounded-2xl bg-amber-950/30 border border-amber-500/30 animate-in fade-in">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono font-bold text-amber-300">Select Override Reason:</span>
+              <button
+                onClick={() => setShowOverrideModal(false)}
+                className="text-zinc-400 hover:text-white p-1"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              {['False Positive', 'Wrong Category', 'Not a Duplicate', 'Low Priority'].map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setOverrideReason(r)}
+                  className={`p-1.5 rounded-xl text-[10px] font-mono border transition ${
+                    overrideReason === r
+                      ? 'bg-amber-500/20 text-amber-200 border-amber-500/50 font-bold'
+                      : 'bg-white/[0.03] text-zinc-400 border-white/[0.06] hover:bg-white/10'
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+
+            <input
+              type="text"
+              placeholder="Optional maintainer note..."
+              value={customNote}
+              onChange={(e) => setCustomNote(e.target.value)}
+              className="w-full px-3 py-1.5 rounded-xl bg-black/60 border border-white/10 text-xs font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/50"
+            />
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => handleFeedback('down', customNote || overrideReason)}
+                className="flex-1 py-2 rounded-full text-xs font-mono font-bold bg-amber-500 text-black hover:bg-amber-400 transition"
+              >
+                Submit Override
+              </button>
+              <button
+                onClick={() => setShowOverrideModal(false)}
+                className="px-4 py-2 rounded-full text-xs font-mono text-zinc-400 hover:text-white bg-white/5 border border-white/10"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : feedbackVote === 'up' ? (
           <div className="p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-mono flex items-center justify-between gap-2 shadow-lg animate-in fade-in">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -250,7 +418,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
             </button>
 
             <button
-              onClick={() => handleFeedback('down')}
+              onClick={() => setShowOverrideModal(true)}
               disabled={submittingFeedback}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full text-xs font-mono font-medium bg-white/5 hover:bg-amber-950/40 text-zinc-300 border border-white/10 hover:border-amber-500/40 transition cursor-pointer active:scale-95 disabled:opacity-50"
               title="Override: Human disagrees with AI verdict"
