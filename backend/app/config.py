@@ -45,11 +45,13 @@ def _env(name: str, default: str | None = None) -> str | None:
 @dataclass
 class Settings:
     github_token: str | None = field(default_factory=lambda: _env("GITHUB_TOKEN") or None)
-    github_repo: str | None = field(default_factory=lambda: _env("GITHUB_REPO") or None)
+    github_repo: str | None = field(default_factory=lambda: _env("TARGET_REPO") or _env("GITHUB_REPO") or None)
+    anthropic_api_key: str | None = field(default_factory=lambda: _env("ANTHROPIC_API_KEY") or None)
     gemini_api_key: str | None = field(default_factory=lambda: _env("GEMINI_API_KEY") or None)
     gemini_model: str = field(default_factory=lambda: _env("GEMINI_MODEL", "gemini-1.5-flash"))
+    embedding_model: str = field(default_factory=lambda: _env("EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
     monitor_poll_interval_seconds: int = field(
-        default_factory=lambda: int(_env("MONITOR_POLL_INTERVAL_SECONDS", "300"))
+        default_factory=lambda: int(_env("POLL_INTERVAL_SECONDS") or _env("MONITOR_POLL_INTERVAL_SECONDS", "300"))
     )
     connect_sync_max_items: int = field(
         default_factory=lambda: int(_env("CONNECT_SYNC_MAX_ITEMS", "30"))
@@ -57,8 +59,8 @@ class Settings:
     full_sync_max_items: int = field(
         default_factory=lambda: int(_env("FULL_SYNC_MAX_ITEMS", "300"))
     )
-    database_path: str = field(default_factory=lambda: _env("DATABASE_PATH", "./data/repoguardian.db"))
-    chroma_path: str = field(default_factory=lambda: _env("CHROMA_PATH", "./data/chroma"))
+    database_path: str = field(default_factory=lambda: _env("DB_PATH") or _env("DATABASE_PATH", "./data/repoguardian.db"))
+    chroma_path: str = field(default_factory=lambda: _env("CHROMA_PATH", "./data/chromadb"))
     log_level: str = field(default_factory=lambda: _env("LOG_LEVEL", "INFO"))
 
     @property
@@ -67,14 +69,14 @@ class Settings:
 
     @property
     def gemini_configured(self) -> bool:
-        return bool(self.gemini_api_key)
+        return bool(self.gemini_api_key or self.anthropic_api_key)
 
     def require_github(self) -> tuple[str, str]:
         missing = []
         if not self.github_token:
             missing.append("GITHUB_TOKEN")
         if not self.github_repo:
-            missing.append("GITHUB_REPO")
+            missing.append("TARGET_REPO / GITHUB_REPO")
         if missing:
             raise ConfigError(missing, "GitHub integration")
         return self.github_token, self.github_repo  # type: ignore[return-value]

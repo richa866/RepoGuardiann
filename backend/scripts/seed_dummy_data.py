@@ -1,16 +1,20 @@
 """Seeds SQLite + Chroma with dummy issues so DB, RAG, escalation, and the
-frontend can all be exercised tonight with zero GitHub/Gemini keys. Uses the
-exact same upsert_issue/embed_issue code path as the real GitHub sync, so
-nothing here is a special-cased mock -- tomorrow's real data flows through
-identical code.
+frontend can all be exercised with zero GitHub/Gemini keys. Uses the
+exact same upsert_issue/embed_issue code path as the real GitHub sync.
 
-Run: python seed_dummy_data.py
+Run: python backend/scripts/seed_dummy_data.py
 """
 from __future__ import annotations
 
+import os
+import sys
 from datetime import datetime, timedelta, timezone
 
-from app.database import (
+backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
+from app.db.database import (
     enqueue_subtask,
     init_db,
     replace_comments,
@@ -18,7 +22,7 @@ from app.database import (
     upsert_issue,
     upsert_repo,
 )
-from app.rag import embed_issue
+from app.rag.embeddings import embed_issue
 
 init_db()
 
@@ -179,19 +183,15 @@ def main():
         upsert_issue(DEMO_REPO, issue)
         comments = DUMMY_COMMENTS.get(issue["number"], [])
         replace_comments(DEMO_REPO, issue["number"], comments)
-        resolution = ""
-        if issue["number"] == 5:
-            resolution = "Fixed in v2.1, closed as duplicate tracking removed."
-        embed_issue(DEMO_REPO, issue["number"], issue["title"], issue["body"], issue["state"], resolution)
+        embed_issue(DEMO_REPO, issue, comments)
 
     for issue in DUMMY_ISSUES:
         enqueue_subtask(DEMO_REPO, "duplicate_check", issue["number"])
         enqueue_subtask(DEMO_REPO, "missing_info_check", issue["number"])
     enqueue_subtask(DEMO_REPO, "health_trend_check", None)
 
-    print(f"Seeded {len(DUMMY_ISSUES)} dummy issues into '{DEMO_REPO}', embedded into Chroma, "
+    print(f"[OK] Seeded {len(DUMMY_ISSUES)} dummy issues into '{DEMO_REPO}', embedded into Chroma, "
           f"queued {len(DUMMY_ISSUES) * 2 + 1} subtasks. Set as the active repo.")
-    print("Now run: POST /monitor/check-now  (or start the server, the scheduler will drain the queue)")
 
 
 if __name__ == "__main__":
