@@ -9,7 +9,19 @@ from datetime import datetime, timezone
 from app.db.database import get_conn
 from app.rag.retrieval import find_similar
 
-DUPLICATE_SIMILARITY_THRESHOLD = 0.80
+# Calibrated against real httpie/cli data (100 issues, see backend/scripts/test_rag.py),
+# not guessed. 0.80 was too strict: it missed real duplicate PR clusters that use
+# different wording for the same fix -- e.g. #1936 "Fixed URL-encoded characters in
+# basic auth credentials" vs #1931 "Fix #1623: Decode percent-encoded characters in
+# URL credentials" both fix the exact same bug (#1623) but only scored 75.2%/74.6%.
+# Same pattern for the SSL/CA-cert fallback cluster (#1871/#1933/#1915, all fixing
+# #1632/#480, 74-83%) and the pipx-install-docs cluster (#1892/#1905/#1907, #1907
+# literally says "Closes #1905", 70.9-79.6%). 0.75 catches all of these while still
+# staying above the one confirmed non-duplicate pair found in the same dataset --
+# #1849 ("Fix option parsing after request arguments") vs #1852 ("Handle ASCII help
+# output streams"), two genuinely different bugs that happen to share vocabulary
+# (argparse, options) and sit at 72-73%.
+DUPLICATE_SIMILARITY_THRESHOLD = 0.75
 REGRESSION_SIMILARITY_THRESHOLD = 0.85
 UNRESPONDED_URGENT_DAYS = 5
 STALENESS_DAYS = 30

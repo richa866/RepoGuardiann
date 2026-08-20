@@ -3,9 +3,27 @@
 from __future__ import annotations
 
 import logging
+import re
+
+from app.db.database import get_conn
 from app.rag.embeddings import get_collection
 
 logger = logging.getLogger("repoguardian.rag.retrieval")
+
+# Our schema has no is_maintainer column on comments, so "maintainer comment"
+# is approximated the same way app.agent.tools.response_time_check already
+# does: any comment NOT from the issue's own author. Good enough signal --
+# a real maintainer role would need a separate GitHub API call per commenter
+# (collaborator check) that we don't make today.
+DECISION_KEYWORDS = [
+    r"duplicate of\s*#?\d+",
+    r"won'?t\s*fix",
+    r"wontfix",
+    r"fixed in\s+\S+",
+    r"closed as\s+\w+",
+    r"not planned",
+]
+DECISION_REGEX = re.compile("|".join(DECISION_KEYWORDS), re.IGNORECASE)
 
 
 def find_similar(
@@ -48,3 +66,57 @@ def find_similar(
             break
 
     return matches
+
+
+def get_decision_context(repo: str, similar_issue_numbers: list[int]) -> list[dict]:
+    """For each similar issue, surface real maintainer-decision text: any
+    comment matching closing-decision language ("duplicate of #X", "wontfix",
+    "fixed in vX.Y", "closed as ...", "not planned"), plus always the last 2
+    non-author comments regardless, so the agent has real decision text to
+    cite even when no keyword hits."""
+    conn = get_conn()
+    contexts: list[dict] = []
+
+    for number in similar_issue_numbers:
+        issue_row = conn.execute(
+            "SELECT author, state FROM issues WHERE repo = ? AND number = ?", (repo, number)
+        ).fetchone()
+        if not issue_row:
+            continue
+        issue_author = issue_row["author"]
+
+        comments = conn.execute(
+            "SELECT author, body, created_at FROM comments "
+            "WHERE repo = ? AND issue_number = ? ORDER BY created_at ASC",
+            (repo, number),
+        ).fetchall()
+        maintainer_comments = [c for c in comments if c["author"] != issue_author]
+
+        excerpts = []
+        for c in maintainer_comments:
+            body = c["body"] or ""
+            m = DECISION_REGEX.search(body)
+            if m:
+                excerpts.append({
+                    "author": c["author"],
+                    "created_at": c["created_at"],
+                    "text": body.strip(),
+                    "matched_phrase": m.group(0),
+                })
+
+        if not excerpts:
+            for c in maintainer_comments[-2:]:
+                excerpts.append({
+                    "author": c["author"],
+                    "created_at": c["created_at"],
+                    "text": (c["body"] or "").strip(),
+                    "matched_phrase": None,
+                })
+
+        contexts.append({
+            "number": number,
+            "state": issue_row["state"],
+            "excerpts": excerpts,
+        })
+
+    return contexts

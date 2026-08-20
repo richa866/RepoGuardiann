@@ -5,7 +5,7 @@ from app.rag.embeddings import (
     issue_document,
     vector_id,
 )
-from app.rag.retrieval import find_similar
+from app.rag.retrieval import find_similar, get_decision_context
 
 __all__ = [
     "embed_issue",
@@ -14,4 +14,5 @@ __all__ = [
     "issue_document",
     "vector_id",
     "find_similar",
+    "get_decision_context",
 ]
