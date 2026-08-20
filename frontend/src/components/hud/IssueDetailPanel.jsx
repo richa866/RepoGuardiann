@@ -53,11 +53,11 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
   const [closingIssue, setClosingIssue] = useState(false);
   const [issueClosed, setIssueClosed] = useState(false);
 
+  // Fetch issue detail when issue changes
   useEffect(() => {
     if (!issue) return;
     let isMounted = true;
     setLoading(true);
-    setFeedbackVote(feedbackMap[issue.number] || null);
     setShowOverrideModal(false);
     setCommentPosted(false);
     setLabelsApplied(false);
@@ -71,6 +71,12 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
     });
 
     return () => { isMounted = false; };
+  }, [issue]);
+
+  // Keep feedbackVote in sync with feedbackMap (handles undo clearing the key)
+  useEffect(() => {
+    if (!issue) return;
+    setFeedbackVote(feedbackMap[issue.number] || null);
   }, [issue, feedbackMap]);
 
   if (!issue) return null;
