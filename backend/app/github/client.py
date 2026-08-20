@@ -333,6 +333,24 @@ class GitHubClient:
         data, _ = self.get(path)
         return data
 
+    def list_branches(self, repo: str, max_items: int = 30) -> list[dict]:
+        """Fetch real Git branches for a repository from GitHub REST API."""
+        path = f"/repos/{repo}/branches"
+        branches = []
+        for raw in self._paginate(path, max_items=max_items, per_page=30):
+            branches.append({
+                "name": raw.get("name"),
+                "commit_sha": (raw.get("commit") or {}).get("sha", "")[:7],
+                "protected": bool(raw.get("protected")),
+            })
+        return branches
+
+    def get_repo_details(self, repo: str) -> dict:
+        """Fetch repository details including default_branch and description."""
+        path = f"/repos/{repo}"
+        data, _ = self.get(path)
+        return data if isinstance(data, dict) else {}
+
 
 # Module-level convenience functions using default environment configuration
 _default_client = GitHubClient()

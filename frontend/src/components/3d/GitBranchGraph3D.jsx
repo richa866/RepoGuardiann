@@ -18,42 +18,18 @@ import {
   ChevronRight
 } from 'lucide-react';
 
-// Dynamic Hierarchical Git Tree Generator tailored per repository
-export function generateRepoBranchGraph(activeRepo = 'demo/repoguardian-seed', issues = []) {
+import api from '../../api';
+
+// Dynamic Hierarchical Git Tree Generator tailored per repository & actual GitHub branches
+export function generateRepoBranchGraph(activeRepo = 'demo/repoguardian-seed', issues = [], branchData = null) {
   const repoName = activeRepo.split('/')[1] || activeRepo;
   const repoOwner = activeRepo.split('/')[0] || 'maintainer';
 
   // Filter relevant issues/PRs for this repo
   const repoIssues = Array.isArray(issues) ? issues.filter((i) => !i.repo || i.repo === activeRepo) : [];
-
-  const securityIssues = repoIssues.filter((i) =>
-    /security|cve|vuln|auth|leak|overflow|urgent/i.test(
-      `${i.title || ''} ${i.body || ''} ${JSON.stringify(i.labels || [])}`
-    )
-  );
-
-  const featureIssues = repoIssues.filter(
-    (i) =>
-      /feat|feature|add|support|implement|new|plugin|option|command/i.test(
-        `${i.title || ''} ${i.body || ''} ${JSON.stringify(i.labels || [])}`
-      ) && !securityIssues.includes(i)
-  );
-
-  const choreIssues = repoIssues.filter(
-    (i) =>
-      /bump|chore|docs|test|ci|workflow|release|clean|refactor|doc/i.test(
-        `${i.title || ''} ${i.body || ''} ${JSON.stringify(i.labels || [])}`
-      ) &&
-      !securityIssues.includes(i) &&
-      !featureIssues.includes(i)
-  );
-
-  const fixIssues = repoIssues.filter(
-    (i) =>
-      !securityIssues.includes(i) &&
-      !featureIssues.includes(i) &&
-      !choreIssues.includes(i)
-  );
+  const openPrs = repoIssues.filter((i) => i.is_pr && (i.state === 'open' || !i.state));
+  const closedPrs = repoIssues.filter((i) => i.is_pr && i.state === 'closed');
+  const normalIssues = repoIssues.filter((i) => !i.is_pr);
 
   // Hash-based deterministic pseudo-random helper for consistent styling
   let hashVal = 0;
@@ -62,239 +38,164 @@ export function generateRepoBranchGraph(activeRepo = 'demo/repoguardian-seed', i
     hashVal |= 0;
   }
   const absHash = Math.abs(hashVal);
-
   const topAuthor = repoIssues[0]?.author || (repoOwner === 'demo' ? 'maintainer1' : repoOwner);
 
-  // Build Commits for Main Trunk
-  const mainCommits = [
-    {
-      id: 'm1',
-      hash: ((absHash + 101) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: `chore: initial repository setup for ${repoName}`,
-      author: topAuthor,
-      time: '14d ago',
-      x: -11.0,
-    },
-    {
-      id: 'm2',
-      hash: ((absHash + 202) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: `feat(core): setup ${repoName} architecture & pipeline`,
-      author: repoIssues[1]?.author || topAuthor,
-      time: '10d ago',
-      x: -6.5,
-    },
-    {
-      id: 'm3',
-      hash: ((absHash + 303) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: `feat(engine): core runtime models & dispatcher`,
-      author: repoIssues[2]?.author || topAuthor,
-      time: '7d ago',
-      x: -2.0,
-    },
-    {
-      id: 'm4',
-      hash: ((absHash + 404) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: `merge: feature/subsystems into main`,
-      author: topAuthor,
-      time: '4d ago',
-      x: 2.5,
-      isMerge: true,
-    },
-    {
-      id: 'm5',
-      hash: ((absHash + 505) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: `chore(release): v1.${(absHash % 9) + 1}.0 tag`,
-      author: topAuthor,
-      time: '2d ago',
-      x: 7.0,
-    },
-    {
-      id: 'm6',
-      hash: ((absHash + 606) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: `merge: release into main`,
-      author: topAuthor,
-      time: '6h ago',
-      x: 11.0,
-      isMerge: true,
-    },
-  ];
+  // 1. Identify Default Trunk and Real Git Branches from API
+  const apiBranches = branchData?.branches || [];
+  const defaultBranchName = branchData?.default_branch || (apiBranches.find(b => b.is_default)?.name) || 'main';
+  const otherBranches = apiBranches.filter(b => b.name !== defaultBranchName);
 
-  // Build Commits for Hotfix / Security Branch
-  const sec1 = securityIssues[0] || fixIssues[0];
-  const sec2 = securityIssues[1] || fixIssues[1];
-  const hotfixCommits = [
-    {
-      id: 'h1',
-      hash: sec1 ? (sec1.number ? `fix#${sec1.number}` : 'sec01') : ((absHash + 707) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: sec1 ? `sec(#${sec1.number}): ${sec1.title}` : `sec(patch): harden memory & buffer limits in ${repoName}`,
-      author: sec1?.author || 'security-audit',
-      time: sec1?.created_at ? '3d ago' : '2d ago',
-      x: 2.5,
-    },
-  ];
-  if (sec2) {
-    hotfixCommits.push({
-      id: 'h2',
-      hash: `fix#${sec2.number}`,
-      msg: `sec(#${sec2.number}): ${sec2.title}`,
-      author: sec2.author || 'security-audit',
-      time: '1d ago',
-      x: 5.5,
+  // 2. Determine if this repo is strictly a single-branch repo (e.g. only main/master and no other branches/PRs)
+  const isSingleBranch = otherBranches.length === 0 && openPrs.length === 0;
+
+  // Build Commits for Default Main Trunk
+  const trunkCommitCount = isSingleBranch ? Math.min(8, Math.max(5, repoIssues.length || 6)) : 6;
+  const mainCommits = [];
+  const startX = -11.0;
+  const endX = 11.0;
+  const stepX = (endX - startX) / Math.max(1, trunkCommitCount - 1);
+
+  for (let idx = 0; idx < trunkCommitCount; idx++) {
+    const curX = Number((startX + idx * stepX).toFixed(1));
+    const issueRef = normalIssues[idx] || closedPrs[idx] || repoIssues[idx];
+    const isFirst = idx === 0;
+    const isLast = idx === trunkCommitCount - 1;
+    const isMerge = !isSingleBranch && (idx === 3 || isLast);
+
+    let msg = `feat(core): architecture & pipeline update`;
+    if (isFirst) {
+      msg = `chore: initial repository initialization for ${repoName}`;
+    } else if (isLast) {
+      msg = `chore(release): v1.${(absHash % 9) + 1}.0 milestone tag`;
+    } else if (issueRef) {
+      msg = `${issueRef.is_pr ? 'pr' : 'fix'}(#${issueRef.number}): ${issueRef.title}`;
+    }
+
+    mainCommits.push({
+      id: `m${idx + 1}`,
+      hash: issueRef?.number ? `git#${issueRef.number}` : ((absHash + (idx + 1) * 101) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: msg,
+      author: issueRef?.author || topAuthor,
+      time: `${Math.max(1, (trunkCommitCount - idx) * 2)}d ago`,
+      x: curX,
+      isMerge: isMerge,
     });
   }
 
-  // Build Commits for Release Candidate Branch
-  const rel1 = choreIssues[0] || repoIssues[3];
-  const rel2 = choreIssues[1] || repoIssues[4];
-  const releaseCommits = [
-    {
-      id: 'r1',
-      hash: ((absHash + 808) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: `chore(release): prepare v${(absHash % 3) + 1}.${(absHash % 8) + 1}.0-rc1`,
-      author: topAuthor,
-      time: '5d ago',
-      x: -4.0,
-    },
-    {
-      id: 'r2',
-      hash: rel1 ? `rel#${rel1.number}` : ((absHash + 909) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: rel1 ? `chore(#${rel1.number}): ${rel1.title}` : `chore(deps): synchronize ${repoName} dependencies`,
-      author: rel1?.author || 'dependabot[bot]',
-      time: '3d ago',
-      x: 0.5,
-    },
-    {
-      id: 'r3',
-      hash: ((absHash + 111) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: `merge: hotfix into release`,
-      author: topAuthor,
-      time: '1d ago',
-      x: 5.0,
-      isMerge: true,
-    },
-    {
-      id: 'r4',
-      hash: rel2 ? `rel#${rel2.number}` : ((absHash + 222) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: rel2 ? `verify(#${rel2.number}): ${rel2.title}` : `chore(release): final verification & test matrix`,
-      author: rel2?.author || topAuthor,
-      time: '8h ago',
-      x: 9.0,
-    },
+  const trunkBranch = {
+    id: 'main',
+    name: defaultBranchName,
+    label: `${repoName} ${defaultBranchName} (Default Trunk)`,
+    color: '#38bdf8',
+    glow: '#0284c7',
+    y: 0,
+    z: 0,
+    commits: mainCommits,
+    isDefault: true,
+  };
+
+  // If strictly single-branch repository, return ONLY the single trunk branch!
+  if (isSingleBranch) {
+    return {
+      isSingleBranch: true,
+      defaultBranch: defaultBranchName,
+      totalBranches: 1,
+      branches: [trunkBranch],
+    };
+  }
+
+  // Otherwise, construct dynamic secondary branches based on REAL branches & active PRs
+  const branchLanes = [
+    { y: 3.4, z: 1.5, color: '#10b981', glow: '#059669' },  // Emerald
+    { y: -3.4, z: 1.5, color: '#a855f7', glow: '#7e22ce' }, // Purple
+    { y: 5.8, z: -1.5, color: '#f43f5e', glow: '#e11d48' }, // Rose
+    { y: -5.8, z: -1.5, color: '#f59e0b', glow: '#d97706' },// Amber
   ];
 
-  // Build Commits for Feature Subsystem Branch
-  const feat1 = featureIssues[0] || repoIssues[5];
-  const feat2 = featureIssues[1] || repoIssues[6];
-  const feat3 = featureIssues[2] || repoIssues[7];
-  const featureCommits = [
-    {
-      id: 'f1',
-      hash: feat1 ? `pr#${feat1.number}` : ((absHash + 333) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: feat1 ? `feat(#${feat1.number}): ${feat1.title}` : `feat(${repoName}): add modular extension hooks`,
-      author: feat1?.author || 'contributor-a',
-      time: '6d ago',
-      x: -8.0,
-    },
-    {
-      id: 'f2',
-      hash: feat2 ? `pr#${feat2.number}` : ((absHash + 444) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: feat2 ? `feat(#${feat2.number}): ${feat2.title}` : `test(${repoName}): expand integration test suite`,
-      author: feat2?.author || 'contributor-b',
-      time: '4d ago',
-      x: -4.0,
-    },
-    {
-      id: 'f3',
-      hash: feat3 ? `pr#${feat3.number}` : ((absHash + 555) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: feat3 ? `fix(#${feat3.number}): ${feat3.title}` : `perf(${repoName}): optimize high-throughput IO path`,
-      author: feat3?.author || 'contributor-c',
-      time: '2d ago',
-      x: 0.0,
-    },
-  ];
+  const secondaryBranches = [];
+  let laneIdx = 0;
 
-  // Build Commits for Ecosystem / Plugin Branch
-  const eco1 = featureIssues[3] || choreIssues[2] || repoIssues[8];
-  const eco2 = featureIssues[4] || choreIssues[3] || repoIssues[9];
-  const ecoCommits = [
-    {
-      id: 'rag1',
-      hash: eco1 ? `pr#${eco1.number}` : ((absHash + 666) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: eco1 ? `feat(#${eco1.number}): ${eco1.title}` : `feat(${repoName}): ecosystem connector & adapter`,
-      author: eco1?.author || 'contributor-d',
-      time: '3d ago',
-      x: 1.5,
-    },
-    {
-      id: 'rag2',
-      hash: eco2 ? `pr#${eco2.number}` : ((absHash + 777) % 0xffffff).toString(16).padStart(6, '0'),
-      msg: eco2 ? `docs(#${eco2.number}): ${eco2.title}` : `docs(${repoName}): user guide & architecture specs`,
-      author: eco2?.author || 'contributor-e',
-      time: '1d ago',
-      x: 6.0,
-    },
-  ];
+  // A. Add Real Non-Default Branches from GitHub API (e.g. develop, v3.2.x)
+  otherBranches.slice(0, 2).forEach((b) => {
+    if (laneIdx >= branchLanes.length) return;
+    const lane = branchLanes[laneIdx++];
+    const bCommits = [
+      {
+        id: `br-${b.name}-1`,
+        hash: b.commit_sha || ((absHash + laneIdx * 222) % 0xffffff).toString(16).padStart(6, '0'),
+        msg: `sync(${b.name}): upstream tracking commit`,
+        author: topAuthor,
+        time: '3d ago',
+        x: -4.0 + laneIdx * 2.0,
+      },
+      {
+        id: `br-${b.name}-2`,
+        hash: ((absHash + laneIdx * 333) % 0xffffff).toString(16).padStart(6, '0'),
+        msg: `chore(${b.name}): branch maintenance & tests`,
+        author: topAuthor,
+        time: '1d ago',
+        x: 2.0 + laneIdx * 2.0,
+      },
+    ];
+
+    secondaryBranches.push({
+      id: `branch-${b.name}`,
+      name: b.name,
+      label: `${b.name} Branch`,
+      color: lane.color,
+      glow: lane.glow,
+      y: lane.y,
+      z: lane.z,
+      forkFrom: { branch: 'main', commitId: 'm2' },
+      mergeInto: { branch: 'main', commitId: `m${trunkCommitCount}` },
+      commits: bCommits,
+    });
+  });
+
+  // B. Add Active Pull Request Feature Branches (e.g. pr/1905, pr/1916)
+  openPrs.slice(0, branchLanes.length - secondaryBranches.length).forEach((pr, prIdx) => {
+    if (laneIdx >= branchLanes.length) return;
+    const lane = branchLanes[laneIdx++];
+    const prBranchName = `pr/${pr.number}-${(pr.title || 'patch').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 18)}`;
+
+    const prCommits = [
+      {
+        id: `pr-${pr.number}-1`,
+        hash: `pr#${pr.number}`,
+        msg: `feat(#${pr.number}): ${pr.title}`,
+        author: pr.author || 'contributor',
+        time: '2d ago',
+        x: -6.0 + prIdx * 3.5,
+      },
+      {
+        id: `pr-${pr.number}-2`,
+        hash: `rev#${pr.number}`,
+        msg: `review(#${pr.number}): address maintainer feedback & CI tests`,
+        author: pr.author || 'contributor',
+        time: '6h ago',
+        x: -1.0 + prIdx * 3.5,
+      },
+    ];
+
+    secondaryBranches.push({
+      id: `pr-branch-${pr.number}`,
+      name: prBranchName,
+      label: `PR #${pr.number}: ${pr.title.slice(0, 24)}...`,
+      color: lane.color,
+      glow: lane.glow,
+      y: lane.y,
+      z: lane.z,
+      forkFrom: { branch: 'main', commitId: prIdx === 0 ? 'm1' : 'm3' },
+      mergeInto: { branch: 'main', commitId: `m${Math.min(trunkCommitCount, 4 + prIdx)}` },
+      commits: prCommits,
+    });
+  });
 
   return {
-    branches: [
-      {
-        id: 'hotfix',
-        name: `hotfix/${repoName}-urgent`,
-        label: `${repoName} Security Patch`,
-        color: '#f43f5e',
-        glow: '#e11d48',
-        y: 5.4,
-        z: -1.5,
-        forkFrom: { branch: 'release', commitId: 'r2' },
-        mergeInto: { branch: 'release', commitId: 'r3' },
-        commits: hotfixCommits,
-      },
-      {
-        id: 'release',
-        name: `release/v${(absHash % 3) + 1}.${(absHash % 8) + 1}`,
-        label: `${repoName} Release Candidate`,
-        color: '#10b981',
-        glow: '#059669',
-        y: 3.2,
-        z: 1.8,
-        forkFrom: { branch: 'main', commitId: 'm2' },
-        mergeInto: { branch: 'main', commitId: 'm6' },
-        commits: releaseCommits,
-      },
-      {
-        id: 'main',
-        name: 'main',
-        label: `${repoName} Trunk (Production)`,
-        color: '#38bdf8',
-        glow: '#0284c7',
-        y: 0,
-        z: 0,
-        commits: mainCommits,
-      },
-      {
-        id: 'feature-core',
-        name: `feat/${repoName}-core`,
-        label: `${repoName} Core Subsystem`,
-        color: '#a855f7',
-        glow: '#7e22ce',
-        y: -3.2,
-        z: 1.5,
-        forkFrom: { branch: 'main', commitId: 'm1' },
-        mergeInto: { branch: 'main', commitId: 'm4' },
-        commits: featureCommits,
-      },
-      {
-        id: 'feature-ecosystem',
-        name: `feat/${repoName}-ecosystem`,
-        label: `${repoName} Ecosystem & Docs`,
-        color: '#f59e0b',
-        glow: '#d97706',
-        y: -5.4,
-        z: -1.5,
-        forkFrom: { branch: 'main', commitId: 'm3' },
-        commits: ecoCommits,
-      },
-    ],
+    isSingleBranch: false,
+    defaultBranch: defaultBranchName,
+    totalBranches: 1 + secondaryBranches.length,
+    branches: [trunkBranch, ...secondaryBranches],
   };
 }
 
@@ -526,10 +427,27 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', issues
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [resetTrigger, setResetTrigger] = useState(0);
   const [isAutoRotating, setIsAutoRotating] = useState(false);
+  const [branchData, setBranchData] = useState(null);
   const controlsRef = useRef();
   const isUserInteracting = useRef(false);
 
-  const branches = useMemo(() => generateRepoBranchGraph(activeRepo, issues).branches, [activeRepo, issues]);
+  useEffect(() => {
+    let isMounted = true;
+    api.listBranches(activeRepo).then(({ data }) => {
+      if (isMounted && data) {
+        setBranchData(data);
+      }
+    });
+    return () => { isMounted = false; };
+  }, [activeRepo]);
+
+  const branchGraph = useMemo(() => {
+    return generateRepoBranchGraph(activeRepo, issues, branchData);
+  }, [activeRepo, issues, branchData]);
+
+  const branches = branchGraph.branches;
+  const isSingleBranch = branchGraph.isSingleBranch;
+  const defaultBranch = branchGraph.defaultBranch;
 
   // Flatten all commits in chronological / coordinate order for sequential stepping
   const allCommitsWithBranch = useMemo(() => {
@@ -728,6 +646,24 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', issues
           }}
         />
       </Canvas>
+
+      {/* Top Header Dynamic Topology Badge */}
+      <div className="absolute top-5 left-5 z-30 pointer-events-auto flex items-center gap-2">
+        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/75 border border-white/15 backdrop-blur-2xl shadow-2xl">
+          <GitBranch className="w-3.5 h-3.5 text-sky-400" />
+          <span className="text-xs font-mono font-bold text-white">{activeRepo}</span>
+          <span className="text-zinc-600">•</span>
+          {isSingleBranch ? (
+            <span className="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px] font-mono font-bold">
+              Trunk-Based (Single Branch: {defaultBranch})
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono font-bold">
+              {branches.length} Branches • Default: {defaultBranch}
+            </span>
+          )}
+        </div>
+      </div>
 
       {/* Selected Commit Detail Card */}
       {selectedCommit && selectedBranch && (

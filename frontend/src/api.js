@@ -59,6 +59,7 @@ export const api = {
   postComment: (number, body, repo) => call(client.post(`/issues/${number}/comment`, { body, repo })),
   addLabels: (number, labels, repo) => call(client.post(`/issues/${number}/labels`, { labels, repo })),
   closeIssue: (number, reason, comment, repo) => call(client.post(`/issues/${number}/close`, { reason, comment, repo })),
+  listBranches: (repo) => call(client.get("/branches", { params: repo ? { repo } : {} })),
 
   // GitHub Auth & User Session API
   authVerifyToken: (token) => call(client.post("/api/auth/github/verify", { token })),

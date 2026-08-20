@@ -164,3 +164,51 @@ def weekly_brief(repo: str | None = None):
     if not target:
         raise HTTPException(400, "no active repo")
     return generate_brief(target)
+
+
+@app.get("/branches", tags=["repos"])
+def list_branches_endpoint(repo: str | None = None):
+    """Fetch real repository branches from GitHub or fallback to local active branch topology."""
+    from app.github.client import GitHubClient
+
+    target = repo or get_active_repo()
+    if not target:
+        raise HTTPException(400, "no active repo")
+
+    row = get_repo_row(target)
+    token = row["token"] if row else None
+    client = GitHubClient(token=token or settings.github_token)
+
+    try:
+        raw_branches = client.list_branches(target)
+        details = client.get_repo_details(target)
+        default_branch = details.get("default_branch") or "main"
+        
+        branches = []
+        for b in raw_branches:
+            b_name = b["name"]
+            branches.append({
+                "name": b_name,
+                "commit_sha": b.get("commit_sha", ""),
+                "protected": b.get("protected", False),
+                "is_default": b_name == default_branch,
+            })
+        
+        if not branches:
+            branches = [{"name": default_branch, "commit_sha": "head", "protected": False, "is_default": True}]
+
+        return {
+            "repo": target,
+            "default_branch": default_branch,
+            "branches": branches,
+            "total_branches": len(branches),
+        }
+    except Exception as exc:
+        logger.warning("Failed to fetch branches for %s: %s", target, exc)
+        return {
+            "repo": target,
+            "default_branch": "main",
+            "branches": [{"name": "main", "commit_sha": "head", "protected": False, "is_default": True}],
+            "total_branches": 1,
+            "fallback": True,
+        }
