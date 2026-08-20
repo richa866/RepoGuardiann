@@ -1,33 +1,29 @@
 """RAG verification script -- proves Project-Aware RAG is real, not a
-placeholder. Picks real closed issues from the database, runs find_similar
-and get_decision_context on each, and prints the real scores and real
-maintainer text so the team can see it with their own eyes.
+placeholder. Runs find_similar and get_decision_context against real issues
+and prints the real scores and real maintainer text so the team can see it
+with their own eyes.
 
-Run: python scripts/test_rag.py <owner/repo> [issue_number ...]
-If no issue numbers are given, picks the 3 closed issues with the most
-comments (best chance of having real discussion/decision text to show).
+Run: python backend/scripts/test_rag.py [owner/repo] [issue_number ...]
 """
-import sys
+from __future__ import annotations
+
 import os
+import sys
+
+# Windows UTF-8 reconfigure
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.db.database import get_conn
+from app.agent.tools import DUPLICATE_SIMILARITY_THRESHOLD, duplicate_check
+from app.db.database import get_active_repo, get_conn
 from app.rag.retrieval import find_similar, get_decision_context
 
 
-def pick_sample_issues(conn, repo: str, n: int = 3) -> list[dict]:
-    rows = conn.execute(
-        "SELECT number, title, body, state, comments_count FROM issues "
-        "WHERE repo = ? AND state = 'closed' ORDER BY comments_count DESC LIMIT ?",
-        (repo, n),
-    ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def print_issue_report(repo: str, issue: dict) -> None:
+def print_issue_report(repo: str, issue: dict, note: str = "") -> None:
     print("=" * 78)
-    print(f"#{issue['number']}  {issue['title']}")
+    print(f"#{issue['number']}  {issue['title']}" + (f"   [{note}]" if note else ""))
     print(f"state={issue['state']}  comments={issue.get('comments_count', '?')}")
     print("-" * 78)
 
@@ -36,11 +32,13 @@ def print_issue_report(repo: str, issue: dict) -> None:
 
     if not matches:
         print("find_similar: no matches returned.")
+        print()
         return
 
     print(f"find_similar -> {len(matches)} match(es):")
     for m in matches:
-        print(f"  #{m['number']:<6} {m['similarity']:.1%}  ({m['state']:<6})  {m['title'][:55]}")
+        flag = "DUPLICATE" if m["similarity"] >= DUPLICATE_SIMILARITY_THRESHOLD and m["state"] == "open" else ""
+        print(f"  #{m['number']:<6} {m['similarity']:.1%}  ({m['state']:<6}) {flag:<10} {m['title'][:50]}")
 
     similar_numbers = [m["number"] for m in matches]
     contexts = get_decision_context(repo, similar_numbers)
@@ -60,33 +58,36 @@ def print_issue_report(repo: str, issue: dict) -> None:
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python scripts/test_rag.py <owner/repo> [issue_number ...]")
-        sys.exit(1)
-
-    repo = sys.argv[1]
+    repo = sys.argv[1] if len(sys.argv) > 1 else (get_active_repo() or "encode/httpx")
     conn = get_conn()
 
     if len(sys.argv) > 2:
         numbers = [int(n) for n in sys.argv[2:]]
-        issues = []
-        for n in numbers:
-            row = conn.execute(
-                "SELECT number, title, body, state, comments_count FROM issues WHERE repo = ? AND number = ?",
-                (repo, n),
-            ).fetchone()
-            if row:
-                issues.append(dict(row))
+        sample = [(n, "") for n in numbers]
     else:
-        issues = pick_sample_issues(conn, repo)
+        # Pick 5 real sample issues from SQLite database
+        rows = conn.execute(
+            "SELECT number FROM issues WHERE repo = ? ORDER BY comments_count DESC LIMIT 5",
+            (repo,),
+        ).fetchall()
+        sample = [(r["number"], "most discussed") for r in rows]
+
+    issues = []
+    for number, note in sample:
+        row = conn.execute(
+            "SELECT number, title, body, state, comments_count FROM issues WHERE repo = ? AND number = ?",
+            (repo, number),
+        ).fetchone()
+        if row:
+            issues.append((dict(row), note))
 
     if not issues:
         print(f"No issues found for {repo}. Run a sync first.")
         sys.exit(1)
 
     print(f"Testing RAG against {len(issues)} real issue(s) from {repo}\n")
-    for issue in issues:
-        print_issue_report(repo, issue)
+    for issue, note in issues:
+        print_issue_report(repo, issue, note)
 
 
 if __name__ == "__main__":
