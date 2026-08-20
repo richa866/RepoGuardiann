@@ -1166,17 +1166,19 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
             onDoubleClick={() => handleResetView()}
           >
             <color attach="background" args={[bgColor]} />
-            <SceneContent
-              issues={augmentedIssues}
-              selectedIssue={selectedIssue}
-              onSelectIssue={onSelectIssue}
-              controlsRef={controlsRef}
-              isUserInteracting={isUserInteracting}
-              activeFilter={activeFilter}
-              viewPreset={viewPreset}
-              resetTrigger={resetTrigger}
-              feedbackMap={feedbackMap}
-            />
+            <Suspense fallback={null}>
+              <SceneContent
+                issues={augmentedIssues}
+                selectedIssue={selectedIssue}
+                onSelectIssue={onSelectIssue}
+                controlsRef={controlsRef}
+                isUserInteracting={isUserInteracting}
+                activeFilter={activeFilter}
+                viewPreset={viewPreset}
+                resetTrigger={resetTrigger}
+                feedbackMap={feedbackMap}
+              />
+            </Suspense>
 
             {/* Butter-Smooth Orbit Controls with Inertia & Soft Limits */}
             <OrbitControls

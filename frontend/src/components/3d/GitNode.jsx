@@ -104,8 +104,8 @@ export function GitNode({
   const isInRangeRef = useRef(true);
   const [isInRange, setIsInRange] = useState(true);
 
-  // Load GLTF Model & Procedural PBR Textures
-  const { scene } = useGLTF('/models/smooth_issue_orb.glb');
+  // Load Unified Faceted Crystal Model & Procedural PBR Textures
+  const { scene } = useGLTF('/models/git_branch_node.glb');
   const [crystalNormal, crystalRoughness, crystalMetalness, crystalEmissive] = useTexture([
     '/textures/crystal_normal.png',
     '/textures/crystal_roughness.png',
@@ -489,7 +489,7 @@ export function GitNode({
   );
 }
 
-useGLTF.preload('/models/smooth_issue_orb.glb');
+useGLTF.preload('/models/git_branch_node.glb');
 useTexture.preload('/textures/crystal_normal.png');
 useTexture.preload('/textures/crystal_roughness.png');
 useTexture.preload('/textures/crystal_metalness.png');
