@@ -79,8 +79,8 @@ def process_one_subtask(subtask: dict) -> dict:
     issue_number = subtask["issue_number"]
     task_type = subtask["task_type"]
 
-    mark_subtask_started(subtask_id)
     try:
+        mark_subtask_started(subtask_id)
         if task_type in ("duplicate_check", "missing_info_check") and issue_number:
             # evaluate_issue() runs all 6 tools + synthesis for this issue and
             # caches the result briefly -- a poll cycle enqueues both
@@ -108,12 +108,32 @@ def process_one_subtask(subtask: dict) -> dict:
 
     except Exception as exc:
         logger.exception("Subtask %s failed: %s", subtask_id, exc)
-        mark_subtask_failed(subtask_id, str(exc))
+        try:
+            mark_subtask_failed(subtask_id, str(exc))
+        except Exception:
+            # DB itself is the thing failing (disk full, locked, etc.) --
+            # nothing more we can do here, but this must not propagate: the
+            # caller's per-item loop needs to move on to the next subtask.
+            logger.exception("Subtask %s: also failed to record the failure", subtask_id)
         return {"error": str(exc)}
 
 
 def process_pending_subtasks(repo: str | None = None, limit: int = 10) -> int:
-    pending = get_pending_subtasks(repo, limit=limit)
+    try:
+        pending = get_pending_subtasks(repo, limit=limit)
+    except Exception as exc:
+        logger.exception("Failed to fetch pending subtasks: %s", exc)
+        return 0
+
+    processed = 0
     for st in pending:
-        process_one_subtask(st)
-    return len(pending)
+        try:
+            process_one_subtask(st)
+        except Exception as exc:
+            # process_one_subtask already catches everything from its own
+            # work -- this is only reached if something outside that (e.g.
+            # a malformed subtask row) blows up. Log and keep draining the
+            # rest of the batch rather than losing it.
+            logger.exception("Subtask %s crashed outside its own handler: %s", st.get("id"), exc)
+        processed += 1
+    return processed

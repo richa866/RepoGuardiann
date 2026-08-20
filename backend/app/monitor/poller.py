@@ -77,8 +77,15 @@ def poll_cycle() -> dict:
         sync_error = str(exc)
         finish_monitor_run(run_id, status="failed", error=sync_error)
 
-    # Drain pending subtasks
-    processed = process_pending_subtasks(active_repo, limit=20)
+    # Drain pending subtasks. process_pending_subtasks already protects itself
+    # (a bad DB read or one crashed subtask won't abort the batch) -- this is
+    # a last line of defense so even an unanticipated failure here can't
+    # crash the cycle after the sync phase above already succeeded.
+    try:
+        processed = process_pending_subtasks(active_repo, limit=20)
+    except Exception as exc:
+        logger.warning("[monitor] subtask draining failed: %s", exc)
+        processed = 0
     logger.info("[monitor] poll cycle finished, processed %d subtasks", processed)
 
     _last_heartbeat = now_iso()
