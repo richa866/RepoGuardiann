@@ -87,6 +87,9 @@ def format_issue_document(title: str, body: str | None) -> str:
     return f"{title.strip()}\n\n{body_text}"
 
 
+issue_document = format_issue_document
+
+
 def format_labels(labels_val: Any) -> str:
     """Converts labels list or JSON string into comma-joined string for Chroma metadata."""
     if isinstance(labels_val, str):
