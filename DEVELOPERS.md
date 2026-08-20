@@ -306,3 +306,8 @@ blender --background --python scripts/generate_smooth_issue_orb.py
 * **Smart Auto-Centering Camera Navigation (`GitTreeScene.jsx`)**:
   * When a category filter is clicked (e.g. `Security`, `Regressions`, `Contentious`), the 3D scene isolates those nodes and the camera automatically glides (`controls.target.lerp()` & `camera.position.lerp()`) to center the new cluster directly in the middle of the viewport.
   * Clicking `All Matrix` smoothly glides back to the overview center.
+
+### 📍 Milestone 16: Vertical Slider Filter Dock on Right Flank
+* **Vertical Triage Filter Slider (`DynamicFilterRibbon.jsx`)**:
+  * Transformed horizontal filter ribbon into a sleek vertical command slider anchored on the right flank (`fixed top-24 right-6`).
+  * Features high-contrast glowing neon active states, individual category icons with micro-interactions, category count pills, and dynamic ambient lighting shifts.
