@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from datetime import datetime, timezone
 
 from app.db.database import get_conn
@@ -126,6 +127,51 @@ def duplicate_check(repo: str, issue_number: int, top_k: int = 5) -> dict:
     }
 
 
+_REPO_AVG_RESPONSE_CACHE: dict[str, tuple[float, float]] = {}  # repo -> (avg_hours, cached_at_epoch)
+_REPO_AVG_RESPONSE_CACHE_TTL_SECONDS = 600  # 10 min -- a long-running poller shouldn't serve a stale average forever
+
+
+def _repo_avg_response_hours(repo: str) -> float:
+    """Average hours between an issue's creation and its first non-author
+    (approximated-maintainer, same convention as get_decision_context) reply,
+    across every issue in this repo that has received one. Issues with zero
+    replies don't have a defined response time and are excluded, not
+    counted as zero. Cached per-repo with a TTL: cheap enough to not
+    recompute on every response_time_check call, fresh enough to not drift
+    stale over a long-running demo poller."""
+    now = time.time()
+    cached = _REPO_AVG_RESPONSE_CACHE.get(repo)
+    if cached and (now - cached[1]) < _REPO_AVG_RESPONSE_CACHE_TTL_SECONDS:
+        return cached[0]
+
+    conn = get_conn()
+    issue_rows = conn.execute(
+        "SELECT number, author, created_at FROM issues WHERE repo = ?", (repo,)
+    ).fetchall()
+
+    response_hours: list[float] = []
+    for issue_row in issue_rows:
+        created_at_str = issue_row["created_at"]
+        if not created_at_str:
+            continue
+        first_reply = conn.execute(
+            "SELECT created_at FROM comments WHERE repo = ? AND issue_number = ? AND author != ? "
+            "ORDER BY created_at ASC LIMIT 1",
+            (repo, issue_row["number"], issue_row["author"]),
+        ).fetchone()
+        if not first_reply:
+            continue
+        created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+        replied_at = datetime.fromisoformat(first_reply["created_at"].replace("Z", "+00:00"))
+        hours = (replied_at - created_at).total_seconds() / 3600.0
+        if hours >= 0:
+            response_hours.append(hours)
+
+    avg = sum(response_hours) / len(response_hours) if response_hours else 0.0
+    _REPO_AVG_RESPONSE_CACHE[repo] = (avg, now)
+    return avg
+
+
 def response_time_check(repo: str, issue_number: int) -> dict:
     issue = _load_issue(repo, issue_number)
     if not issue:
@@ -139,25 +185,49 @@ def response_time_check(repo: str, issue_number: int) -> dict:
     now = datetime.now(timezone.utc)
     days_open = (now - created_at).total_seconds() / 86400.0
 
-    comments = _load_comments(repo, issue_number)
+    comments = _load_comments(repo, issue_number)  # ordered created_at ASC
     author = issue.get("author")
     non_author_comments = [c for c in comments if c.get("author") != author]
-
     has_maintainer_reply = len(non_author_comments) > 0
+
+    # Hours since the issue's last maintainer comment, or since it was opened
+    # if it's never been responded to -- distinct from days_open, which is
+    # always time-since-created regardless of reply history.
+    if has_maintainer_reply:
+        last_reply_str = non_author_comments[-1]["created_at"]
+        last_reply_at = datetime.fromisoformat(last_reply_str.replace("Z", "+00:00"))
+        hours_since_response = (now - last_reply_at).total_seconds() / 3600.0
+    else:
+        hours_since_response = (now - created_at).total_seconds() / 3600.0
+
     is_urgent = (
         days_open >= UNRESPONDED_URGENT_DAYS
         and not has_maintainer_reply
         and issue.get("state") == "open"
     )
 
+    # is_slow is a different signal from is_urgent: not "unresponded past a
+    # fixed threshold" but "already waiting longer than this repo's own
+    # average first-response time" -- only meaningful while still waiting.
+    repo_avg_hours = _repo_avg_response_hours(repo)
+    is_slow = (
+        not has_maintainer_reply
+        and issue.get("state") == "open"
+        and repo_avg_hours > 0
+        and hours_since_response > repo_avg_hours
+    )
+
     return {
         "repo": repo,
         "issue_number": issue_number,
         "days_open": round(days_open, 2),
+        "hours_since_response": round(hours_since_response, 2),
+        "repo_avg_hours": round(repo_avg_hours, 2),
         "total_comments": len(comments),
         "non_author_comments": len(non_author_comments),
         "has_maintainer_reply": has_maintainer_reply,
         "is_urgent": is_urgent,
+        "is_slow": is_slow,
     }
 
 
