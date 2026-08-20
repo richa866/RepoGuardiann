@@ -321,8 +321,8 @@ def evaluate_issue(repo: str, issue_number: int) -> dict:
         c.execute(
             """
             INSERT INTO escalations
-                (repo, issue_number, escalate, categories, explanation, evidence_json, drafted_comment, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (repo, issue_number, escalate, categories, explanation, evidence_json, tool_calls, drafted_comment, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 repo,
@@ -331,6 +331,7 @@ def evaluate_issue(repo: str, issue_number: int) -> dict:
                 json.dumps(decision["categories"]),
                 decision["explanation"],
                 json.dumps(evidence),
+                json.dumps(decision.get("tool_calls", [])),
                 decision.get("drafted_comment"),
                 now_iso(),
             ),

@@ -91,6 +91,10 @@ def init_db(db_path: str | None = None) -> sqlite3.Connection:
         conn.execute("ALTER TABLE comments ADD COLUMN is_maintainer INTEGER NOT NULL DEFAULT 0;")
     except sqlite3.OperationalError:
         pass
+    try:
+        conn.execute("ALTER TABLE escalations ADD COLUMN tool_calls TEXT NOT NULL DEFAULT '[]';")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     return conn
 

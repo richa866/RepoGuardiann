@@ -99,7 +99,12 @@ CREATE TABLE IF NOT EXISTS escalations (
     escalate INTEGER NOT NULL,                   -- 1 = escalated, 0 = regular triage
     categories TEXT NOT NULL DEFAULT '[]',       -- JSON list: ["security-sensitive", "urgent", "likely-duplicate", "possible-regression"]
     explanation TEXT,                            -- Plain English reason for maintainer
-    evidence_json TEXT NOT NULL DEFAULT '{}',    -- Structured evidence (similarity scores, matching issue IDs, matched keywords)
+    evidence_json TEXT NOT NULL DEFAULT '{}',    -- Flattened {tool_name: output} for quick lookup by tool
+    tool_calls TEXT NOT NULL DEFAULT '[]',       -- Ordered [{tool, input, output}, ...] -- the real agent trace:
+                                                  -- which tools Gemini actually chose to call, in what order,
+                                                  -- with what arguments. This is what proves multi-step
+                                                  -- reasoning happened, not evidence_json (which loses order,
+                                                  -- inputs, and repeated calls to the same tool).
     drafted_comment TEXT,                        -- Auto-generated draft response for the maintainer
     human_override TEXT,                         -- NULL | 'confirmed' | 'dismissed'
     created_at TEXT NOT NULL

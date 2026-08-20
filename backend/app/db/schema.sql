@@ -71,7 +71,8 @@ CREATE TABLE IF NOT EXISTS escalations (
     escalate INTEGER NOT NULL,                   -- 1 = escalated, 0 = normal
     categories TEXT NOT NULL DEFAULT '[]',       -- JSON list, e.g. ["security-sensitive", "urgent", "likely-duplicate"]
     explanation TEXT,
-    evidence_json TEXT NOT NULL DEFAULT '{}',
+    evidence_json TEXT NOT NULL DEFAULT '{}',    -- flattened {tool_name: output}, quick lookup by tool
+    tool_calls TEXT NOT NULL DEFAULT '[]',       -- ordered [{tool, input, output}, ...] -- the actual trace
     drafted_comment TEXT,
     human_override TEXT,                         -- NULL | 'confirmed' | 'dismissed'
     created_at TEXT NOT NULL
