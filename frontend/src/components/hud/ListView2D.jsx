@@ -9,10 +9,12 @@ import {
   Clock, 
   CheckCircle2, 
   GitPullRequest,
-  ExternalLink
+  ExternalLink,
+  Check,
+  X
 } from 'lucide-react';
 
-export function ListView2D({ issues = [], selectedIssue, onSelectIssue }) {
+export function ListView2D({ issues = [], selectedIssue, onSelectIssue, feedbackMap = {} }) {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
@@ -82,6 +84,9 @@ export function ListView2D({ issues = [], selectedIssue, onSelectIssue }) {
           filteredIssues.map((issue) => {
             const isSelected = selectedIssue?.number === issue.number && selectedIssue?.repo === issue.repo;
             const cats = issue.latest_categories || [];
+            const feedback = feedbackMap[issue.number];
+            const isConfirmed = feedback === 'up';
+            const isOverridden = feedback === 'down';
 
             return (
               <div
@@ -89,12 +94,18 @@ export function ListView2D({ issues = [], selectedIssue, onSelectIssue }) {
                 onClick={() => onSelectIssue(issue)}
                 className={`p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                   isSelected
-                    ? 'bg-white/10 border-white text-white shadow-lg'
+                    ? 'bg-white/15 border-white text-white shadow-lg'
+                    : isConfirmed
+                    ? 'bg-emerald-950/20 border-emerald-500/30 hover:border-emerald-500/50'
+                    : isOverridden
+                    ? 'bg-amber-950/20 border-amber-500/30 hover:border-amber-500/50 opacity-80'
                     : 'bg-white/[0.02] border-white/5 hover:border-white/20 hover:bg-white/[0.04]'
                 }`}
               >
                 <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
-                  <span className="font-mono text-xs text-zinc-400 font-bold shrink-0">
+                  <span className={`font-mono text-xs font-bold shrink-0 ${
+                    isConfirmed ? 'text-emerald-400' : isOverridden ? 'text-amber-400' : 'text-zinc-400'
+                  }`}>
                     #{issue.number}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -108,6 +119,18 @@ export function ListView2D({ issues = [], selectedIssue, onSelectIssue }) {
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                  {/* Feedback Status Pill in 2D View */}
+                  {isConfirmed && (
+                    <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold flex items-center gap-1">
+                      <Check className="w-3 h-3 text-emerald-400" /> Confirmed
+                    </span>
+                  )}
+                  {isOverridden && (
+                    <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold flex items-center gap-1">
+                      <X className="w-3 h-3 text-amber-400" /> Overridden
+                    </span>
+                  )}
+
                   {cats.map((c) => (
                     <span
                       key={c}
@@ -116,6 +139,7 @@ export function ListView2D({ issues = [], selectedIssue, onSelectIssue }) {
                       {c.replace('-sensitive', '').replace('/needs-triage', '')}
                     </span>
                   ))}
+
                   {issue.url && (
                     <a
                       href={issue.url}

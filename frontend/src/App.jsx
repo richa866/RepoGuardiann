@@ -26,6 +26,7 @@ export default function App() {
   const [isConnectOpen, setIsConnectOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
+  const [feedbackMap, setFeedbackMap] = useState({});
   const [toastMsg, setToastMsg] = useState(null);
 
   const showToast = (msg) => {
@@ -95,6 +96,10 @@ export default function App() {
   };
 
   const handleFeedbackSubmitted = (issueNum, vote) => {
+    setFeedbackMap((prev) => ({ ...prev, [issueNum]: vote }));
+    if (vote === 'down' && selectedIssue?.number === issueNum) {
+      setSelectedIssue(null);
+    }
     showToast(`Feedback recorded for #${issueNum} (${vote === 'up' ? 'Confirmed' : 'Overridden'})`);
     refreshData();
   };
@@ -175,11 +180,13 @@ export default function App() {
               issues={issues}
               selectedIssue={selectedIssue}
               onSelectIssue={setSelectedIssue}
+              feedbackMap={feedbackMap}
               fallback={
                 <ListView2D
                   issues={issues}
                   selectedIssue={selectedIssue}
                   onSelectIssue={setSelectedIssue}
+                  feedbackMap={feedbackMap}
                 />
               }
             />
@@ -197,6 +204,7 @@ export default function App() {
             issues={issues}
             selectedIssue={selectedIssue}
             onSelectIssue={setSelectedIssue}
+            feedbackMap={feedbackMap}
           />
         )}
 
@@ -215,6 +223,7 @@ export default function App() {
           issue={selectedIssue}
           onClose={() => setSelectedIssue(null)}
           onFeedbackSubmitted={handleFeedbackSubmitted}
+          feedbackMap={feedbackMap}
         />
       )}
 

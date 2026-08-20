@@ -631,7 +631,8 @@ function SceneContent({
   isUserInteracting,
   activeFilter = 'all',
   viewPreset = '3d',
-  resetTrigger = 0
+  resetTrigger = 0,
+  feedbackMap = {}
 }) {
   const { nodeData, clusterList, connections, selectedPos, autoFrameConfig } = useMemo(() => {
     const clusterMap = {
@@ -887,6 +888,7 @@ function SceneContent({
             selectedIssue={selectedIssue}
             isClosest={closestNodeKey === `${issue.repo}-${issue.number}`}
             isFiltered={activeFilter !== 'all'}
+            isConfirmed={feedbackMap[issue.number] === 'up'}
             nodeIndex={idx}
             onSelect={onSelectIssue}
           />
@@ -905,7 +907,7 @@ function SceneContent({
   );
 }
 
-export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallback }) {
+export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedbackMap = {}, fallback }) {
   const controlsRef = useRef();
   const isUserInteracting = useRef(false);
   const [activeFilter, setActiveFilter] = useState('all');
@@ -913,8 +915,11 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
   const [isAutoRotating, setIsAutoRotating] = useState(false);
   const [viewPreset, setViewPreset] = useState('3d');
 
-  // Guarantee minimum 3 nodes per sub-type
+  // Guarantee minimum 3 nodes per sub-type (excluding overridden issues)
   const augmentedIssues = useMemo(() => {
+    // Exclude issues overridden by the maintainer
+    const activeIssues = issues.filter((i) => feedbackMap[i.number] !== 'down');
+
     const byCategory = {
       security_urgent: [],
       regression: [],
@@ -924,7 +929,7 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
       normal: [],
     };
 
-    issues.forEach((issue) => {
+    activeIssues.forEach((issue) => {
       const cats = issue.latest_categories || [];
       let placed = false;
       if (matchesCategory(cats, 'security_urgent')) { byCategory.security_urgent.push(issue); placed = true; }
@@ -935,24 +940,24 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
       if (!placed) { byCategory.normal.push(issue); }
     });
 
-    const finalIssues = [...issues];
-    const existingNumbers = new Set(issues.map((i) => i.number));
+    const finalIssues = [...activeIssues];
+    const existingNumbers = new Set(activeIssues.map((i) => i.number));
 
     Object.entries(DEFAULT_SUBTYPE_SEEDS).forEach(([catKey, seeds]) => {
       const currentCount = byCategory[catKey].length;
       if (currentCount < 3) {
-        const needed = 3 - currentCount;
-        seeds.slice(0, needed).forEach((seed) => {
-          if (!existingNumbers.has(seed.number)) {
+        seeds.forEach((seed) => {
+          if (!existingNumbers.has(seed.number) && feedbackMap[seed.number] !== 'down' && byCategory[catKey].length < 3) {
             finalIssues.push(seed);
             existingNumbers.add(seed.number);
+            byCategory[catKey].push(seed);
           }
         });
       }
     });
 
     return finalIssues;
-  }, [issues]);
+  }, [issues, feedbackMap]);
 
   // Filter issues for sequential stepping
   const visibleIssues = useMemo(() => {
@@ -1168,6 +1173,7 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
               activeFilter={activeFilter}
               viewPreset={viewPreset}
               resetTrigger={resetTrigger}
+              feedbackMap={feedbackMap}
             />
 
             {/* Butter-Smooth Orbit Controls with Inertia & Soft Limits */}

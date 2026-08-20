@@ -11,7 +11,8 @@ import {
   CheckCircle2, 
   GitPullRequest, 
   MessageSquare,
-  Clock
+  Clock,
+  Check
 } from 'lucide-react';
 
 // Generates meaningful, concise 1-line triage summaries instead of generic titles
@@ -91,11 +92,13 @@ export function GitNode({
   selectedIssue, 
   isClosest = false,
   isFiltered = false,
+  isConfirmed = false,
   nodeIndex = 0,
   onSelect 
 }) {
   const groupRef = useRef();
   const orbRef = useRef();
+  const ringRef = useRef();
   const [hovered, setHovered] = useState(false);
   const isInRangeRef = useRef(true);
   const [isInRange, setIsInRange] = useState(true);
@@ -121,6 +124,15 @@ export function GitNode({
   );
 
   const { color, glowColor, baseIntensity, pulseSpeed, opacity } = useMemo(() => {
+    if (isConfirmed) {
+      return {
+        color: new THREE.Color('#10b981'),
+        glowColor: new THREE.Color('#34d399'),
+        baseIntensity: 3.2,
+        pulseSpeed: 1.2,
+        opacity: 1.0,
+      };
+    }
     if (isSecurity) {
       return {
         color: new THREE.Color('#f43f5e'),
@@ -182,7 +194,7 @@ export function GitNode({
       pulseSpeed: 1.0,
       opacity: 0.95,
     };
-  }, [isSecurity, isUrgent, isContentious, isRegression, isDuplicate, isStale, isNeedsInfo]);
+  }, [isConfirmed, isSecurity, isUrgent, isContentious, isRegression, isDuplicate, isStale, isNeedsInfo]);
 
   // Apply smooth material styles
   useMemo(() => {
@@ -230,6 +242,12 @@ export function GitNode({
       orbRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
     }
 
+    // Orbiting verified ring animation
+    if (ringRef.current) {
+      ringRef.current.rotation.z += 0.02;
+      ringRef.current.rotation.x = Math.sin(t * 1.2) * 0.3;
+    }
+
     if (pulseSpeed > 0) {
       const pulse = Math.sin(t * pulseSpeed) * 0.5 + 0.5;
       const currentIntensity = baseIntensity * (0.75 + 0.5 * pulse);
@@ -260,41 +278,24 @@ export function GitNode({
 
     if (isFiltered) {
       const [x, y] = position;
-      // Push outward away from center (0,0)
-      if (Math.abs(x) < 1.0 && y > 1.0) {
-        return [0, 2.1, 0]; // Top node
-      }
-      if (Math.abs(x) < 1.0 && y < -1.0) {
-        return [0, -2.1, 0]; // Bottom node
-      }
-      if (x < -1.0 && y < 0) {
-        return [-2.8, -0.6, 0]; // Bottom-left node
-      }
-      if (x > 1.0 && y < 0) {
-        return [2.8, -0.6, 0]; // Bottom-right node
-      }
-      if (x < -1.0 && y >= 0) {
-        return [-2.8, 0.6, 0]; // Top-left node
-      }
-      if (x > 1.0 && y >= 0) {
-        return [2.8, 0.6, 0]; // Top-right node
-      }
+      if (Math.abs(x) < 1.0 && y > 1.0) return [0, 2.1, 0];
+      if (Math.abs(x) < 1.0 && y < -1.0) return [0, -2.1, 0];
+      if (x < -1.0 && y < 0) return [-2.8, -0.6, 0];
+      if (x > 1.0 && y < 0) return [2.8, -0.6, 0];
+      if (x < -1.0 && y >= 0) return [-2.8, 0.6, 0];
+      if (x > 1.0 && y >= 0) return [2.8, 0.6, 0];
     }
 
-    // Staggered slot in cluster overview
     const slot = nodeIndex % 4;
     switch (slot) {
-      case 0: return [0, 1.9, 0];      // Top
-      case 1: return [0, -1.9, 0];     // Bottom
-      case 2: return [2.4, 0.2, 0];    // Right
-      case 3: return [-2.4, 0.2, 0];   // Left
+      case 0: return [0, 1.9, 0];
+      case 1: return [0, -1.9, 0];
+      case 2: return [2.4, 0.2, 0];
+      case 3: return [-2.4, 0.2, 0];
       default: return [0, 1.9, 0];
     }
   }, [nodeIndex, isSelected, hovered, isFiltered, position]);
 
-  // Level of Detail (LOD) Hierarchy:
-  // - Full Expanded Card: Shown if selected, hovered, in filtered sub-type, or is the single closest node to camera
-  // - Compact Micro-Pill: Shown for nearby cluster neighbors in All Matrix
   const isExpanded = isSelected || hovered || isFiltered || isClosest;
   const showTag = isExpanded || (!isOtherSelected && isInRange);
 
@@ -327,6 +328,16 @@ export function GitNode({
             <meshBasicMaterial color="#ffffff" side={THREE.DoubleSide} transparent opacity={0.9} />
           </mesh>
         )}
+
+        {/* Confirmed Orbital Emerald Ring */}
+        {isConfirmed && (
+          <group ref={ringRef}>
+            <mesh rotation={[Math.PI / 3, Math.PI / 4, 0]}>
+              <torusGeometry args={[1.15, 0.035, 16, 32]} />
+              <meshBasicMaterial color="#10b981" transparent opacity={0.85} />
+            </mesh>
+          </group>
+        )}
       </group>
 
       {/* Static 3D Transformed Billboard Label with Radial Outward Offsets */}
@@ -340,37 +351,46 @@ export function GitNode({
           className="pointer-events-none select-none animate-in fade-in zoom-in-95 duration-200"
         >
           {isExpanded ? (
-            /* Mode A: Full Rich Triage Card (Hero Node / Filtered Sub-Types / Hover / Select) */
+            /* Mode A: Full Rich Triage Card */
             <div
               className={`flex flex-col gap-1.5 p-3 rounded-2xl font-mono backdrop-blur-3xl border transition-all w-64 shadow-2xl ${
                 isSelected
                   ? 'bg-white text-black border-white shadow-[0_0_35px_rgba(255,255,255,0.4)] scale-105 z-20'
                   : hovered
                   ? 'bg-black/90 text-white border-white/40 scale-105 shadow-black/90 z-20'
+                  : isConfirmed
+                  ? 'bg-emerald-950/80 text-white border-emerald-500/40 shadow-emerald-950/80'
                   : 'bg-black/80 text-white border-white/25 shadow-black/80'
               }`}
             >
-              {/* Header Row: Number + Category Badge */}
+              {/* Header Row: Number + Category Badge / Confirmed Badge */}
               <div className="flex items-center justify-between gap-1.5 border-b border-white/10 pb-1">
                 <div className="flex items-center gap-1.5 font-bold">
                   <span
                     className="w-2 h-2 rounded-full shrink-0 shadow-sm"
-                    style={{ backgroundColor: isSelected ? '#000000' : `#${color.getHexString()}` }}
+                    style={{ backgroundColor: isSelected ? '#000000' : isConfirmed ? '#10b981' : `#${color.getHexString()}` }}
                   />
                   <span className={`font-mono text-xs font-bold ${isSelected ? 'text-black' : 'text-white'}`}>
                     #{issue?.number}
                   </span>
                 </div>
 
-                <span
-                  className={`text-[9px] uppercase font-mono px-2 py-0.5 rounded-full ${
-                    isSelected
-                      ? 'bg-black text-white font-bold'
-                      : 'bg-white/10 text-zinc-300 border border-white/15'
-                  }`}
-                >
-                  {categoryLabel}
-                </span>
+                <div className="flex items-center gap-1">
+                  {isConfirmed && (
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold flex items-center gap-0.5">
+                      <Check className="w-2.5 h-2.5 text-emerald-400" /> Confirmed
+                    </span>
+                  )}
+                  <span
+                    className={`text-[9px] uppercase font-mono px-2 py-0.5 rounded-full ${
+                      isSelected
+                        ? 'bg-black text-white font-bold'
+                        : 'bg-white/10 text-zinc-300 border border-white/15'
+                    }`}
+                  >
+                    {categoryLabel}
+                  </span>
+                </div>
               </div>
 
               {/* Agentic Semantic Triage Summary */}
@@ -378,19 +398,24 @@ export function GitNode({
                 {summaryText}
               </div>
 
-              {/* Issue Description Excerpt */}
-              <div className={`text-[10px] font-sans line-clamp-2 leading-snug ${isSelected ? 'text-zinc-700' : 'text-zinc-400'}`}>
+              {/* Issue Description Excerpt (Scrollable on hover/select) */}
+              <div className={`text-[10px] font-sans leading-snug ${
+                isSelected ? 'text-zinc-700 max-h-24 overflow-y-auto pointer-events-auto pr-1' : 'text-zinc-400 line-clamp-2'
+              }`}>
                 {descriptionText}
               </div>
             </div>
           ) : (
-            /* Mode B: Minimalist Non-Intrusive Micro-Pill (Nearby Background Nodes in All Matrix) */
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono backdrop-blur-2xl border border-white/15 bg-black/75 shadow-lg whitespace-nowrap text-zinc-300 hover:text-white transition-all">
+            /* Mode B: Minimalist Non-Intrusive Micro-Pill */
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono backdrop-blur-2xl border shadow-lg whitespace-nowrap text-zinc-300 hover:text-white transition-all ${
+              isConfirmed ? 'bg-emerald-950/80 border-emerald-500/40' : 'bg-black/75 border-white/15'
+            }`}>
               <span
                 className="w-2 h-2 rounded-full shrink-0 shadow-sm"
-                style={{ backgroundColor: `#${color.getHexString()}` }}
+                style={{ backgroundColor: isConfirmed ? '#10b981' : `#${color.getHexString()}` }}
               />
               <span className="font-bold text-white font-mono">#{issue?.number}</span>
+              {isConfirmed && <span className="text-[10px] text-emerald-400 font-bold">✓</span>}
               <span className="text-[10px] text-zinc-400 uppercase">{categoryLabel}</span>
             </div>
           )}
