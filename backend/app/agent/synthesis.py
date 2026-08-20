@@ -19,7 +19,7 @@ from app.agent.tool_schemas import GEMINI_TOOL_SCHEMAS
 from app.agent.tools import TOOL_REGISTRY
 from app.config import settings
 from app.db.database import get_conn, now_iso, tx
-from app.llm import short_error, synthesize_json
+from app.llm import get_fallback_models, short_error, synthesize_json
 
 logger = logging.getLogger("repoguardian.agent.synthesis")
 
@@ -191,15 +191,36 @@ def _extract_json(text: str) -> dict:
 
 
 def _run_tool_use_loop(repo: str, issue_number: int, issue: dict, max_turns: int = 8) -> dict:
-    """The real agent loop. Gemini chooses which tools to call and in what
-    order; we execute the actual Python functions and feed results back as
-    function_response turns, repeating until it gives a final JSON answer
-    instead of another tool call. Raises on any failure -- caller falls
-    back to run_all_tools + _rule_based_fallback."""
+    """The real agent loop. Tries every available model on this API key in
+    turn (see llm.get_fallback_models) -- Gemini's free tier quota is
+    tracked per model, so a 429 on the configured model doesn't mean every
+    model is exhausted. A model is only abandoned for the NEXT one on total
+    failure, never mid-conversation: each model gets its own fresh chat
+    session, since swapping models partway through one conversation would
+    mean the new model has no memory of turns the old one already took.
+    Raises only if every model in the chain fails; caller falls back to
+    run_all_tools + _rule_based_fallback (the deterministic heuristic tier)."""
     genai.configure(api_key=settings.require_gemini())
     tool = genai.protos.Tool(function_declarations=GEMINI_TOOL_SCHEMAS)
+
+    last_exc: Exception | None = None
+    for model_name in get_fallback_models():
+        try:
+            return _run_tool_use_loop_with_model(model_name, tool, repo, issue_number, issue, max_turns)
+        except Exception as exc:
+            last_exc = exc
+            logger.info(
+                "Tool-use loop failed on model %s for %s#%s (%s); trying next model",
+                model_name, repo, issue_number, short_error(exc),
+            )
+    raise last_exc
+
+
+def _run_tool_use_loop_with_model(
+    model_name: str, tool: "genai.protos.Tool", repo: str, issue_number: int, issue: dict, max_turns: int
+) -> dict:
     model = genai.GenerativeModel(
-        settings.gemini_model,
+        model_name,
         tools=[tool],
         system_instruction=SYSTEM_PROMPT,
     )
@@ -281,6 +302,7 @@ Investigate this issue using whichever tools are actually relevant, then give yo
         "drafted_comment": parsed.get("drafted_comment"),
         "tool_calls": tool_calls,
         "synthesis_method": "gemini-tool-use",
+        "model_used": model_name,
     }
 
 
