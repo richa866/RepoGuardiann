@@ -13,7 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.db.database import get_active_repo, get_conn, now_iso, tx
+from app.db.database import get_active_repo, get_effective_repo, get_conn, now_iso, tx
 
 router = APIRouter(tags=["feedback"])
 
@@ -118,7 +118,7 @@ def submit_feedback(number: int, body: FeedbackInput):
     else:
         override_status = "dismissed"
 
-    target = body.repo or get_active_repo() or "encode/httpx"
+    target = get_effective_repo(body.repo)
     conn = get_conn()
 
     issue_exists = conn.execute(
@@ -171,7 +171,7 @@ def get_issue_feedback(number: int, repo: Optional[str] = None):
     """GET /issues/{number}/feedback — returns all feedback records for an issue."""
     _ensure_override_reason_column()
 
-    target = repo or get_active_repo() or "encode/httpx"
+    target = get_effective_repo(repo)
     conn = get_conn()
     rows = conn.execute(
         """
@@ -201,27 +201,15 @@ def get_issue_feedback(number: int, repo: Optional[str] = None):
 
 @router.get("/feedback/override-stats", response_model=OverrideStats)
 def get_override_stats(repo: Optional[str] = None):
-    """GET /feedback/override-stats?repo=encode/httpx
+    """GET /feedback/override-stats
 
     Returns a breakdown of how often each override reason has been used.
     Useful for calibrating the AI — if 'false_positive' dominates,
     the triage thresholds are too aggressive.
-
-    Example response:
-    {
-      "repo": "encode/httpx",
-      "total_overrides": 18,
-      "breakdown": {
-        "false_positive": 9,
-        "wrong_category": 5,
-        "not_a_duplicate": 3,
-        "low_priority": 1
-      }
-    }
     """
     _ensure_override_reason_column()
 
-    target = repo or get_active_repo() or "encode/httpx"
+    target = get_effective_repo(repo)
     conn = get_conn()
 
     rows = conn.execute(

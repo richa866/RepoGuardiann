@@ -12,7 +12,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.db.database import get_active_repo, get_conn, now_iso
+from app.db.database import get_active_repo, get_effective_repo, get_conn, now_iso
 from app.rag.embeddings import collection_size
 
 logger = logging.getLogger("repoguardian.api.health")
@@ -171,7 +171,7 @@ def get_health(repo: Optional[str] = None):
     System liveness check & health snapshot data.
     Reads health_snapshots table; if thin, live-computes metrics from issues table.
     """
-    target = repo or get_active_repo() or "encode/httpx"
+    target = get_effective_repo(repo)
     conn = get_conn()
     cur = conn.cursor()
 
@@ -252,7 +252,7 @@ def get_health_metrics(repo: Optional[str] = None, limit: int = Query(default=60
     """
     from app.api.health_trends import compute_backlog_drift_series, compute_summary_stats
 
-    target = repo or get_active_repo() or "encode/httpx"
+    target = get_effective_repo(repo)
     conn = get_conn()
     cur = conn.cursor()
 

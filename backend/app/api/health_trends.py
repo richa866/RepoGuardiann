@@ -10,7 +10,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
-from app.db.database import get_active_repo, get_conn, now_iso
+from app.db.database import get_active_repo, get_effective_repo, get_conn, now_iso
 
 logger = logging.getLogger("repoguardian.api.health_trends")
 
@@ -50,7 +50,7 @@ class CategoryBreakdownItem(BaseModel):
 # --- Metric Calculation Helpers ---
 
 def get_target_repo(repo: Optional[str]) -> str:
-    return repo or get_active_repo() or "encode/httpx"
+    return get_effective_repo(repo)
 
 
 def compute_summary_stats(repo: str) -> dict[str, Any]:

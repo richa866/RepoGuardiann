@@ -8,7 +8,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.db.database import get_active_repo, get_conn, get_repo_row, now_iso, tx
+from app.db.database import get_active_repo, get_effective_repo, get_conn, get_repo_row, now_iso, tx
 from app.github.client import GitHubClient
 
 router = APIRouter(tags=["issues"])
@@ -118,10 +118,7 @@ class IssueDetailResponse(BaseModel):
 # --- Helpers ---
 
 def _require_active_repo(explicit: str | None = None) -> str:
-    repo = explicit or get_active_repo()
-    if not repo:
-        repo = "encode/httpx"
-    return repo
+    return get_effective_repo(explicit)
 
 
 def _parse_json_field(val: Any, default: Any) -> Any:

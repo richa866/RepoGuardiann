@@ -156,6 +156,26 @@ def set_active_repo(repo: str) -> None:
     set_meta("active_repo", repo)
 
 
+def get_effective_repo(explicit: str | None = None) -> str:
+    """Returns the requested repo, the current active repo from sync_meta,
+    or the most recently added repo from the repos table.
+    """
+    if explicit:
+        return explicit
+    active = get_active_repo()
+    if active:
+        return active
+    try:
+        conn = get_conn()
+        row = conn.execute("SELECT repo FROM repos ORDER BY added_at DESC LIMIT 1").fetchone()
+        if row:
+            set_active_repo(row["repo"])
+            return row["repo"]
+    except Exception:
+        pass
+    return "demo/repoguardian-seed"
+
+
 def log_monitor_event(event: str, detail: str = "", repo: str | None = None) -> None:
     with tx() as conn:
         conn.execute(
