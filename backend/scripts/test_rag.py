@@ -3,10 +3,11 @@ placeholder. Runs find_similar and get_decision_context against real issues
 and prints the real scores and real maintainer text so the team can see it
 with their own eyes.
 
-Run: python scripts/test_rag.py <owner/repo> [issue_number ...]
-If no issue numbers are given, runs the adversarial regression sample below
-(15 real issues: normal duplicate clusters, near-identical titles that are
-NOT duplicates, closed issues with zero comments, and near-empty bodies).
+Run: python scripts/test_rag.py [owner/repo] [issue_number ...]
+If no owner/repo is given, uses the active connected repo. If no issue
+numbers are given, runs the adversarial regression sample below (15 real
+issues: normal duplicate clusters, near-identical titles that are NOT
+duplicates, closed issues with zero comments, and near-empty bodies).
 
 The ADVERSARIAL_ASSERTIONS block encodes ground truth found by hand during
 threshold calibration (see the DUPLICATE_SIMILARITY_THRESHOLD comment in
@@ -14,8 +15,10 @@ app/agent/tools.py) -- this is what makes it a *regression* script: if a
 future threshold or embedding change flips one of these, this script fails
 loudly instead of silently.
 """
-import sys
+from __future__ import annotations
+
 import os
+import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -24,8 +27,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-from app.db.database import get_conn
 from app.agent.tools import DUPLICATE_SIMILARITY_THRESHOLD, duplicate_check
+from app.db.database import get_active_repo, get_conn
 from app.rag.retrieval import find_similar, get_decision_context
 
 # Curated adversarial sample for httpie/cli, found during Step 5/7 calibration.
@@ -118,11 +121,7 @@ def run_assertions(repo: str) -> bool:
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python scripts/test_rag.py <owner/repo> [issue_number ...]")
-        sys.exit(1)
-
-    repo = sys.argv[1]
+    repo = sys.argv[1] if len(sys.argv) > 1 else (get_active_repo() or "encode/httpx")
     conn = get_conn()
 
     if len(sys.argv) > 2:

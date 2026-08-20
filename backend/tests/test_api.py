@@ -7,7 +7,7 @@ def test_health():
     resp = client.get("/health")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "ok"
+    assert data["status"] == "healthy"
     assert "github_configured" in data
 
 def test_monitor_status():
