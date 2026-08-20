@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Html, useGLTF } from '@react-three/drei';
+import { OrbitControls, Html, useGLTF, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { NebulaBackground } from './NebulaBackground';
 import { 
@@ -154,6 +154,10 @@ function CrystalCommitNode({ commit, branch, isSelected, selectedCommit, onSelec
   const meshRef = useRef();
   const [hovered, setHovered] = useState(false);
   const { scene } = useGLTF('/models/git_branch_node.glb');
+  const [crystalNormal, crystalRoughness] = useTexture([
+    '/textures/crystal_normal.png',
+    '/textures/crystal_roughness.png',
+  ]);
 
   const cloned = useMemo(() => {
     const c = scene.clone(true);
@@ -161,16 +165,21 @@ function CrystalCommitNode({ commit, branch, isSelected, selectedCommit, onSelec
       if (child.isMesh) {
         child.material = child.material.clone();
         child.material.color = new THREE.Color(branch.color);
+        child.material.normalMap = crystalNormal;
+        child.material.normalScale = new THREE.Vector2(1.5, 1.5);
+        child.material.roughnessMap = crystalRoughness;
         if (child.material.emissive) {
           child.material.emissive = new THREE.Color(branch.glow);
           child.material.emissiveIntensity = commit.isMerge ? 3.5 : 2.2;
         }
-        child.material.roughness = 0.15;
-        child.material.metalness = 0.9;
+        child.material.roughness = 0.2;
+        child.material.metalness = 0.88;
+        child.material.clearcoat = 0.6;
+        child.material.needsUpdate = true;
       }
     });
     return c;
-  }, [scene, branch, commit.isMerge]);
+  }, [scene, branch, commit.isMerge, crystalNormal, crystalRoughness]);
 
   useFrame(({ clock }) => {
     if (!meshRef.current) return;
@@ -652,3 +661,5 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
 }
 
 useGLTF.preload('/models/git_branch_node.glb');
+useTexture.preload('/textures/crystal_normal.png');
+useTexture.preload('/textures/crystal_roughness.png');
