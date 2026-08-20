@@ -6,7 +6,6 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from app.agent.synthesis import evaluate_issue
-from app.agent.tools import duplicate_check, missing_info_check
 from app.db.database import get_conn, log_monitor_event, now_iso, tx
 from app.monitor.queue import (
     get_pending_subtasks,
@@ -82,15 +81,16 @@ def process_one_subtask(subtask: dict) -> dict:
 
     mark_subtask_started(subtask_id)
     try:
-        if task_type == "duplicate_check" and issue_number:
-            res = duplicate_check(repo, issue_number)
-            evaluate_issue(repo, issue_number)
-            mark_subtask_done(subtask_id, res, f"Ran duplicate check for #{issue_number}")
-            return res
-
-        elif task_type == "missing_info_check" and issue_number:
-            res = missing_info_check(repo, issue_number)
-            mark_subtask_done(subtask_id, res, f"Ran missing info check for #{issue_number}")
+        if task_type in ("duplicate_check", "missing_info_check") and issue_number:
+            # evaluate_issue() runs all 6 tools + synthesis for this issue and
+            # caches the result briefly -- a poll cycle enqueues both
+            # duplicate_check and missing_info_check for the same changed
+            # issue, so whichever is processed first does the real work
+            # (including missing_info_check's Gemini call) and the other
+            # reuses it instead of re-running everything from scratch.
+            full = evaluate_issue(repo, issue_number)
+            res = full["evidence"].get(task_type, {})
+            mark_subtask_done(subtask_id, res, f"Ran {task_type} for #{issue_number}")
             return res
 
         elif task_type == "health_trend_check":

@@ -4,12 +4,23 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 from app.agent.tools import TOOL_REGISTRY
 from app.db.database import get_conn, now_iso, tx
 from app.llm import synthesize_json
 
 logger = logging.getLogger("repoguardian.agent.synthesis")
+
+# A poll cycle enqueues both a duplicate_check and a missing_info_check
+# subtask for the same changed issue; without this, the processor triggers
+# two full evaluate_issue() runs for one issue -- doubling every tool call
+# (including missing_info_check's real Gemini call) and the synthesis call
+# itself. TTL is long enough to cover both subtasks landing in the same
+# drain batch, short enough that a later genuine re-check isn't served
+# minutes-stale evidence.
+_RECENT_EVALUATIONS: dict[tuple[str, int], tuple[dict, float]] = {}
+_RECENT_EVALUATIONS_TTL_SECONDS = 120
 
 
 def run_all_tools(repo: str, issue_number: int) -> dict:
@@ -79,6 +90,12 @@ def _rule_based_fallback(issue: dict, evidence: dict) -> dict:
 
 
 def evaluate_issue(repo: str, issue_number: int) -> dict:
+    cache_key = (repo, issue_number)
+    now = time.time()
+    cached = _RECENT_EVALUATIONS.get(cache_key)
+    if cached and (now - cached[1]) < _RECENT_EVALUATIONS_TTL_SECONDS:
+        return cached[0]
+
     conn = get_conn()
     issue_row = conn.execute("SELECT * FROM issues WHERE repo = ? AND number = ?", (repo, issue_number)).fetchone()
     if not issue_row:
@@ -139,9 +156,11 @@ Respond with a JSON object:
             ),
         )
 
-    return {
+    result = {
         "repo": repo,
         "issue_number": issue_number,
         "evidence": evidence,
         **decision,
     }
+    _RECENT_EVALUATIONS[cache_key] = (result, now)
+    return result
