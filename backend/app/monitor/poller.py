@@ -18,9 +18,10 @@ _scheduler: BackgroundScheduler | None = None
 def poll_cycle() -> None:
     active_repo = get_active_repo()
     if not active_repo:
+        logger.debug("[monitor] no active repo connected, skipping cycle")
         return
 
-    logger.info("Starting background poll cycle for %s", active_repo)
+    logger.info("[monitor] starting poll cycle for %s", active_repo)
     log_monitor_event("poll_tick", f"Background scheduler tick for {active_repo}", repo=active_repo)
 
     row = get_repo_row(active_repo)
@@ -31,11 +32,11 @@ def poll_cycle() -> None:
         try:
             run_sync(active_repo, token=token, since=since, max_items=50)
         except Exception as exc:
-            logger.warning("Poll sync failed: %s", exc)
+            logger.warning("[monitor] poll sync failed: %s", exc)
 
     # Drain pending subtasks
     processed = process_pending_subtasks(active_repo, limit=20)
-    logger.info("Poll cycle finished. Processed %d subtasks.", processed)
+    logger.info("[monitor] poll cycle finished, processed %d subtasks", processed)
 
 
 def start_scheduler() -> BackgroundScheduler:
@@ -50,7 +51,7 @@ def start_scheduler() -> BackgroundScheduler:
             replace_existing=True,
         )
         _scheduler.start()
-        logger.info("BackgroundScheduler started with interval %ds", settings.monitor_poll_interval_seconds)
+        logger.info("[monitor] scheduler started, interval %ds", settings.monitor_poll_interval_seconds)
     return _scheduler
 
 
