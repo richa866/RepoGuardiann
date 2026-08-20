@@ -35,7 +35,11 @@ def list_issues(
                (SELECT escalate FROM escalations e WHERE e.repo = i.repo AND e.issue_number = i.number
                 ORDER BY e.id DESC LIMIT 1) AS latest_escalate,
                (SELECT explanation FROM escalations e WHERE e.repo = i.repo AND e.issue_number = i.number
-                ORDER BY e.id DESC LIMIT 1) AS latest_explanation
+                ORDER BY e.id DESC LIMIT 1) AS latest_explanation,
+               (SELECT vote FROM feedback f WHERE f.repo = i.repo AND f.issue_number = i.number
+                ORDER BY f.id DESC LIMIT 1) AS latest_feedback,
+               (SELECT human_override FROM escalations e WHERE e.repo = i.repo AND e.issue_number = i.number
+                ORDER BY e.id DESC LIMIT 1) AS latest_human_override
         FROM issues i
         WHERE i.repo = ?
     """

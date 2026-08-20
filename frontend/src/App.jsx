@@ -44,7 +44,20 @@ export default function App() {
           api.listIssues({ repo: h.active_repo, limit: 100 }),
           api.monitorStatus(h.active_repo),
         ]);
-        if (issueRes?.issues) setIssues(issueRes.issues);
+        if (issueRes?.issues) {
+          setIssues(issueRes.issues);
+          setFeedbackMap((prev) => {
+            const next = { ...prev };
+            issueRes.issues.forEach((i) => {
+              if (i.latest_feedback && !next[i.number]) {
+                next[i.number] = i.latest_feedback;
+              } else if (i.latest_human_override && !next[i.number]) {
+                next[i.number] = i.latest_human_override === 'confirmed' ? 'up' : 'down';
+              }
+            });
+            return next;
+          });
+        }
         if (monRes) setMonitorStatus(monRes);
       }
     }
