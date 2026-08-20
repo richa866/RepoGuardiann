@@ -18,89 +18,285 @@ import {
   ChevronRight
 } from 'lucide-react';
 
-// Structured Hierarchical Git Tree Definition
-const TREE_DATA = {
-  branches: [
+// Dynamic Hierarchical Git Tree Generator tailored per repository
+export function generateRepoBranchGraph(activeRepo = 'demo/repoguardian-seed', issues = []) {
+  const repoName = activeRepo.split('/')[1] || activeRepo;
+  const repoOwner = activeRepo.split('/')[0] || 'maintainer';
+
+  // Filter relevant issues/PRs for this repo
+  const repoIssues = Array.isArray(issues) ? issues.filter((i) => !i.repo || i.repo === activeRepo) : [];
+
+  const securityIssues = repoIssues.filter((i) =>
+    /security|cve|vuln|auth|leak|overflow|urgent/i.test(
+      `${i.title || ''} ${i.body || ''} ${JSON.stringify(i.labels || [])}`
+    )
+  );
+
+  const featureIssues = repoIssues.filter(
+    (i) =>
+      /feat|feature|add|support|implement|new|plugin|option|command/i.test(
+        `${i.title || ''} ${i.body || ''} ${JSON.stringify(i.labels || [])}`
+      ) && !securityIssues.includes(i)
+  );
+
+  const choreIssues = repoIssues.filter(
+    (i) =>
+      /bump|chore|docs|test|ci|workflow|release|clean|refactor|doc/i.test(
+        `${i.title || ''} ${i.body || ''} ${JSON.stringify(i.labels || [])}`
+      ) &&
+      !securityIssues.includes(i) &&
+      !featureIssues.includes(i)
+  );
+
+  const fixIssues = repoIssues.filter(
+    (i) =>
+      !securityIssues.includes(i) &&
+      !featureIssues.includes(i) &&
+      !choreIssues.includes(i)
+  );
+
+  // Hash-based deterministic pseudo-random helper for consistent styling
+  let hashVal = 0;
+  for (let i = 0; i < activeRepo.length; i++) {
+    hashVal = (hashVal << 5) - hashVal + activeRepo.charCodeAt(i);
+    hashVal |= 0;
+  }
+  const absHash = Math.abs(hashVal);
+
+  const topAuthor = repoIssues[0]?.author || (repoOwner === 'demo' ? 'maintainer1' : repoOwner);
+
+  // Build Commits for Main Trunk
+  const mainCommits = [
     {
-      id: 'hotfix',
-      name: 'hotfix/terminal-escape',
-      label: 'Security Patch Branch',
-      color: '#f43f5e',
-      glow: '#e11d48',
-      y: 5.4,
-      z: -1.5,
-      forkFrom: { branch: 'release', commitId: 'r2' },
-      mergeInto: { branch: 'release', commitId: 'r3' },
-      commits: [
-        { id: 'h1', hash: 'ee11aa', msg: 'sec(parser): strip ANSI escape sequences', author: 'security-lead', time: '2d ago', x: 2.0 },
-      ],
+      id: 'm1',
+      hash: ((absHash + 101) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: `chore: initial repository setup for ${repoName}`,
+      author: topAuthor,
+      time: '14d ago',
+      x: -11.0,
     },
     {
-      id: 'release',
-      name: 'release/v2.1',
-      label: 'Release Candidate',
-      color: '#10b981',
-      glow: '#059669',
-      y: 3.2,
-      z: 1.8,
-      forkFrom: { branch: 'main', commitId: 'm2' },
-      mergeInto: { branch: 'main', commitId: 'm6' },
-      commits: [
-        { id: 'r1', hash: 'a1b2c3', msg: 'chore(release): bump version v2.1.0-rc1', author: 'maintainer1', time: '3d ago', x: -3.5 },
-        { id: 'r2', hash: 'd4e5f6', msg: 'fix(engine): optimize token budget', author: 'alice', time: '2d ago', x: 0.5 },
-        { id: 'r3', hash: '7g8h9i', msg: 'merge: hotfix/terminal-escape into release', author: 'maintainer1', time: '1d ago', x: 4.5, isMerge: true },
-        { id: 'r4', hash: '0j1k2l', msg: 'chore(release): v2.1.0 final verification', author: 'maintainer1', time: '6h ago', x: 8 },
-      ],
+      id: 'm2',
+      hash: ((absHash + 202) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: `feat(core): setup ${repoName} architecture & pipeline`,
+      author: repoIssues[1]?.author || topAuthor,
+      time: '10d ago',
+      x: -6.5,
     },
     {
-      id: 'main',
-      name: 'main',
-      label: 'Trunk (Production)',
-      color: '#38bdf8',
-      glow: '#0284c7',
-      y: 0,
-      z: 0,
-      commits: [
-        { id: 'm1', hash: '8f2a1b', msg: 'chore: initial repository setup', author: 'maintainer1', time: '5d ago', x: -10 },
-        { id: 'm2', hash: '3e9c4d', msg: 'feat(core): setup SQLite & models', author: 'maintainer1', time: '4d ago', x: -6 },
-        { id: 'm3', hash: '5b1a8f', msg: 'feat(rag): Chroma embeddings vector index', author: 'maintainer1', time: '3d ago', x: -2 },
-        { id: 'm4', hash: '7c2e9a', msg: 'merge: feature/auth-sessions into main', author: 'maintainer1', time: '2d ago', x: 2, isMerge: true },
-        { id: 'm5', hash: '9d4f1b', msg: 'feat(agent): multi-step evaluation tools', author: 'maintainer1', time: '1d ago', x: 6 },
-        { id: 'm6', hash: '1a8b3c', msg: 'merge: release/v2.1 into main', author: 'maintainer1', time: '4h ago', x: 10, isMerge: true },
-      ],
+      id: 'm3',
+      hash: ((absHash + 303) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: `feat(engine): core runtime models & dispatcher`,
+      author: repoIssues[2]?.author || topAuthor,
+      time: '7d ago',
+      x: -2.0,
     },
     {
-      id: 'feature-auth',
-      name: 'feature/auth-sessions',
-      label: 'Security & Auth Subsystem',
-      color: '#a855f7',
-      glow: '#7e22ce',
-      y: -3.2,
-      z: 1.5,
-      forkFrom: { branch: 'main', commitId: 'm1' },
-      mergeInto: { branch: 'main', commitId: 'm4' },
-      commits: [
-        { id: 'f1', hash: '99a8b7', msg: 'feat(auth): token validation middleware', author: 'bob', time: '4d ago', x: -7.5 },
-        { id: 'f2', hash: '66c5d4', msg: 'test(auth): add bearer token unit tests', author: 'bob', time: '3d ago', x: -4.0 },
-        { id: 'f3', hash: '33e2f1', msg: 'fix(session): sanitize plaintext credentials', author: 'carol', time: '2d ago', x: -0.5 },
-      ],
+      id: 'm4',
+      hash: ((absHash + 404) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: `merge: feature/subsystems into main`,
+      author: topAuthor,
+      time: '4d ago',
+      x: 2.5,
+      isMerge: true,
     },
     {
-      id: 'feature-rag',
-      name: 'feature/rag-pipeline',
-      label: 'Knowledge Engine',
-      color: '#f59e0b',
-      glow: '#d97706',
-      y: -5.4,
-      z: -1.5,
-      forkFrom: { branch: 'main', commitId: 'm3' },
-      commits: [
-        { id: 'rag1', hash: '44dd22', msg: 'feat(rag): chunking and cosine distance', author: 'dave', time: '2d ago', x: 1.0 },
-        { id: 'rag2', hash: '77bb55', msg: 'feat(rag): maintainer resolution context', author: 'dave', time: '1d ago', x: 5.0 },
-      ],
+      id: 'm5',
+      hash: ((absHash + 505) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: `chore(release): v1.${(absHash % 9) + 1}.0 tag`,
+      author: topAuthor,
+      time: '2d ago',
+      x: 7.0,
     },
-  ],
-};
+    {
+      id: 'm6',
+      hash: ((absHash + 606) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: `merge: release into main`,
+      author: topAuthor,
+      time: '6h ago',
+      x: 11.0,
+      isMerge: true,
+    },
+  ];
+
+  // Build Commits for Hotfix / Security Branch
+  const sec1 = securityIssues[0] || fixIssues[0];
+  const sec2 = securityIssues[1] || fixIssues[1];
+  const hotfixCommits = [
+    {
+      id: 'h1',
+      hash: sec1 ? (sec1.number ? `fix#${sec1.number}` : 'sec01') : ((absHash + 707) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: sec1 ? `sec(#${sec1.number}): ${sec1.title}` : `sec(patch): harden memory & buffer limits in ${repoName}`,
+      author: sec1?.author || 'security-audit',
+      time: sec1?.created_at ? '3d ago' : '2d ago',
+      x: 2.5,
+    },
+  ];
+  if (sec2) {
+    hotfixCommits.push({
+      id: 'h2',
+      hash: `fix#${sec2.number}`,
+      msg: `sec(#${sec2.number}): ${sec2.title}`,
+      author: sec2.author || 'security-audit',
+      time: '1d ago',
+      x: 5.5,
+    });
+  }
+
+  // Build Commits for Release Candidate Branch
+  const rel1 = choreIssues[0] || repoIssues[3];
+  const rel2 = choreIssues[1] || repoIssues[4];
+  const releaseCommits = [
+    {
+      id: 'r1',
+      hash: ((absHash + 808) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: `chore(release): prepare v${(absHash % 3) + 1}.${(absHash % 8) + 1}.0-rc1`,
+      author: topAuthor,
+      time: '5d ago',
+      x: -4.0,
+    },
+    {
+      id: 'r2',
+      hash: rel1 ? `rel#${rel1.number}` : ((absHash + 909) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: rel1 ? `chore(#${rel1.number}): ${rel1.title}` : `chore(deps): synchronize ${repoName} dependencies`,
+      author: rel1?.author || 'dependabot[bot]',
+      time: '3d ago',
+      x: 0.5,
+    },
+    {
+      id: 'r3',
+      hash: ((absHash + 111) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: `merge: hotfix into release`,
+      author: topAuthor,
+      time: '1d ago',
+      x: 5.0,
+      isMerge: true,
+    },
+    {
+      id: 'r4',
+      hash: rel2 ? `rel#${rel2.number}` : ((absHash + 222) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: rel2 ? `verify(#${rel2.number}): ${rel2.title}` : `chore(release): final verification & test matrix`,
+      author: rel2?.author || topAuthor,
+      time: '8h ago',
+      x: 9.0,
+    },
+  ];
+
+  // Build Commits for Feature Subsystem Branch
+  const feat1 = featureIssues[0] || repoIssues[5];
+  const feat2 = featureIssues[1] || repoIssues[6];
+  const feat3 = featureIssues[2] || repoIssues[7];
+  const featureCommits = [
+    {
+      id: 'f1',
+      hash: feat1 ? `pr#${feat1.number}` : ((absHash + 333) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: feat1 ? `feat(#${feat1.number}): ${feat1.title}` : `feat(${repoName}): add modular extension hooks`,
+      author: feat1?.author || 'contributor-a',
+      time: '6d ago',
+      x: -8.0,
+    },
+    {
+      id: 'f2',
+      hash: feat2 ? `pr#${feat2.number}` : ((absHash + 444) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: feat2 ? `feat(#${feat2.number}): ${feat2.title}` : `test(${repoName}): expand integration test suite`,
+      author: feat2?.author || 'contributor-b',
+      time: '4d ago',
+      x: -4.0,
+    },
+    {
+      id: 'f3',
+      hash: feat3 ? `pr#${feat3.number}` : ((absHash + 555) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: feat3 ? `fix(#${feat3.number}): ${feat3.title}` : `perf(${repoName}): optimize high-throughput IO path`,
+      author: feat3?.author || 'contributor-c',
+      time: '2d ago',
+      x: 0.0,
+    },
+  ];
+
+  // Build Commits for Ecosystem / Plugin Branch
+  const eco1 = featureIssues[3] || choreIssues[2] || repoIssues[8];
+  const eco2 = featureIssues[4] || choreIssues[3] || repoIssues[9];
+  const ecoCommits = [
+    {
+      id: 'rag1',
+      hash: eco1 ? `pr#${eco1.number}` : ((absHash + 666) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: eco1 ? `feat(#${eco1.number}): ${eco1.title}` : `feat(${repoName}): ecosystem connector & adapter`,
+      author: eco1?.author || 'contributor-d',
+      time: '3d ago',
+      x: 1.5,
+    },
+    {
+      id: 'rag2',
+      hash: eco2 ? `pr#${eco2.number}` : ((absHash + 777) % 0xffffff).toString(16).padStart(6, '0'),
+      msg: eco2 ? `docs(#${eco2.number}): ${eco2.title}` : `docs(${repoName}): user guide & architecture specs`,
+      author: eco2?.author || 'contributor-e',
+      time: '1d ago',
+      x: 6.0,
+    },
+  ];
+
+  return {
+    branches: [
+      {
+        id: 'hotfix',
+        name: `hotfix/${repoName}-urgent`,
+        label: `${repoName} Security Patch`,
+        color: '#f43f5e',
+        glow: '#e11d48',
+        y: 5.4,
+        z: -1.5,
+        forkFrom: { branch: 'release', commitId: 'r2' },
+        mergeInto: { branch: 'release', commitId: 'r3' },
+        commits: hotfixCommits,
+      },
+      {
+        id: 'release',
+        name: `release/v${(absHash % 3) + 1}.${(absHash % 8) + 1}`,
+        label: `${repoName} Release Candidate`,
+        color: '#10b981',
+        glow: '#059669',
+        y: 3.2,
+        z: 1.8,
+        forkFrom: { branch: 'main', commitId: 'm2' },
+        mergeInto: { branch: 'main', commitId: 'm6' },
+        commits: releaseCommits,
+      },
+      {
+        id: 'main',
+        name: 'main',
+        label: `${repoName} Trunk (Production)`,
+        color: '#38bdf8',
+        glow: '#0284c7',
+        y: 0,
+        z: 0,
+        commits: mainCommits,
+      },
+      {
+        id: 'feature-core',
+        name: `feat/${repoName}-core`,
+        label: `${repoName} Core Subsystem`,
+        color: '#a855f7',
+        glow: '#7e22ce',
+        y: -3.2,
+        z: 1.5,
+        forkFrom: { branch: 'main', commitId: 'm1' },
+        mergeInto: { branch: 'main', commitId: 'm4' },
+        commits: featureCommits,
+      },
+      {
+        id: 'feature-ecosystem',
+        name: `feat/${repoName}-ecosystem`,
+        label: `${repoName} Ecosystem & Docs`,
+        color: '#f59e0b',
+        glow: '#d97706',
+        y: -5.4,
+        z: -1.5,
+        forkFrom: { branch: 'main', commitId: 'm3' },
+        commits: ecoCommits,
+      },
+    ],
+  };
+}
 
 // Dynamic Camera Controller that auto-frames any tree size perfectly in the center
 function SmoothBranchCameraController({ selectedCommit, selectedBranch, resetTrigger, autoFrameConfig, isUserInteracting, controlsRef }) {
@@ -325,7 +521,7 @@ function TreeBranchConnections({ branches = [] }) {
   );
 }
 
-export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShowIssues }) {
+export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', issues = [], onShowIssues }) {
   const [selectedCommit, setSelectedCommit] = useState(null);
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [resetTrigger, setResetTrigger] = useState(0);
@@ -333,7 +529,7 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
   const controlsRef = useRef();
   const isUserInteracting = useRef(false);
 
-  const branches = TREE_DATA.branches;
+  const branches = useMemo(() => generateRepoBranchGraph(activeRepo, issues).branches, [activeRepo, issues]);
 
   // Flatten all commits in chronological / coordinate order for sequential stepping
   const allCommitsWithBranch = useMemo(() => {

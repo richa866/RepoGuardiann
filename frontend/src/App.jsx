@@ -156,7 +156,9 @@ export default function App() {
     return (
       <div className="relative w-screen h-screen overflow-hidden bg-[#06090f]">
         <GitBranchGraph3D
+          key={`branch-viz-${health?.active_repo || 'default'}`}
           activeRepo={health?.active_repo || 'demo/repoguardian-seed'}
+          issues={issues}
           onShowIssues={handleEngageTriage}
         />
 
@@ -200,7 +202,9 @@ export default function App() {
       <main className="w-full h-full relative">
         {activeView === 'topology' && (
           <GitBranchGraph3D
+            key={`topology-${health?.active_repo || 'default'}`}
             activeRepo={health?.active_repo || 'demo/repoguardian-seed'}
+            issues={issues}
             onShowIssues={() => setActiveView('3d')}
           />
         )}
@@ -208,6 +212,8 @@ export default function App() {
         {activeView === '3d' && (
           <div className="w-full h-full">
             <GitTreeScene
+              key={`tree-${health?.active_repo || 'default'}`}
+              activeRepo={health?.active_repo || 'demo/repoguardian-seed'}
               issues={issues}
               selectedIssue={selectedIssue}
               onSelectIssue={setSelectedIssue}
