@@ -73,7 +73,7 @@ def run_sync(
     try:
         while fetched < max_items:
             per_page = min(100, max_items - fetched)
-            raw_issues, _ = client.list_issues(repo=repo, state="all", since=since, per_page=per_page, page=page)
+            raw_issues = client.list_issues(repo=repo, state="all", since=since, per_page=per_page, page=page)
             if not raw_issues:
                 break
 
