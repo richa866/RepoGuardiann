@@ -128,12 +128,20 @@ class SwitchRepoIn(BaseModel):
 
 @app.post("/repos/active", tags=["repos"])
 def set_active_repo_endpoint(body: SwitchRepoIn):
-    from app.db.database import set_active_repo, get_repo_row
+    from app.db.database import set_active_repo, get_repo_row, insert_repo, get_conn
     row = get_repo_row(body.repo)
     if not row:
-        raise HTTPException(404, f"Repository {body.repo} not found in database")
+        insert_repo(body.repo, token=None)
     set_active_repo(body.repo)
-    return {"status": "ok", "active_repo": body.repo}
+
+    # Check if repo has issues; if 0, trigger background ingestion
+    conn = get_conn()
+    count = conn.execute("SELECT COUNT(*) c FROM issues WHERE repo = ?", (body.repo,)).fetchone()["c"]
+    if count == 0:
+        from app.repos import trigger_bg_sync
+        trigger_bg_sync(body.repo, token=None, max_items=settings.connect_sync_max_items)
+
+    return {"status": "ok", "active_repo": body.repo, "issues_count": count}
 
 
 @app.post("/sync", tags=["repos"])

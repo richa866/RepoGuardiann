@@ -52,9 +52,9 @@ export default function App() {
   };
 
   // Load health, issues, and monitor loop status
-  const refreshData = useCallback(async () => {
+  const refreshData = useCallback(async (targetRepo) => {
     const [{ data: h }, { data: repoRes }] = await Promise.all([
-      api.health(),
+      api.health(targetRepo),
       api.listRepos(),
     ]);
     if (repoRes?.repos) {
@@ -62,10 +62,11 @@ export default function App() {
     }
     if (h) {
       setHealth(h);
-      if (h.active_repo) {
+      const active = targetRepo || h.active_repo;
+      if (active) {
         const [{ data: issueRes }, { data: monRes }] = await Promise.all([
-          api.listIssues({ repo: h.active_repo, limit: 500 }),
-          api.monitorStatus(h.active_repo),
+          api.listIssues({ repo: active, limit: 500 }),
+          api.monitorStatus(active),
         ]);
         if (issueRes?.issues) {
           setIssues(issueRes.issues);
@@ -88,7 +89,7 @@ export default function App() {
 
   useEffect(() => {
     refreshData();
-    const interval = setInterval(refreshData, 10000);
+    const interval = setInterval(() => refreshData(), 10000);
     return () => clearInterval(interval);
   }, [refreshData]);
 
@@ -161,7 +162,7 @@ export default function App() {
     setSelectedIssue(null);
     showToast(`Switching to ${newRepo}...`);
     await api.switchRepo(newRepo);
-    await refreshData();
+    await refreshData(newRepo);
     showToast(`Switched active repository to ${newRepo}`);
   };
 
@@ -283,6 +284,7 @@ export default function App() {
               onFeedbackSubmitted={handleFeedbackSubmitted}
               fallback={
                 <ListView2D
+                  key={`list-fallback-${health?.active_repo || 'default'}`}
                   issues={issues}
                   selectedIssue={selectedIssue}
                   onSelectIssue={setSelectedIssue}
@@ -301,6 +303,7 @@ export default function App() {
 
         {activeView === 'prs' && (
           <PullRequestsView
+            key={`prs-${health?.active_repo || 'default'}`}
             issues={issues}
             selectedIssue={selectedIssue}
             onSelectIssue={setSelectedIssue}
@@ -310,6 +313,7 @@ export default function App() {
 
         {activeView === 'list' && (
           <ListView2D
+            key={`list-${health?.active_repo || 'default'}`}
             issues={issues}
             selectedIssue={selectedIssue}
             onSelectIssue={setSelectedIssue}
@@ -318,11 +322,17 @@ export default function App() {
         )}
 
         {activeView === 'health' && (
-          <HealthMetricsView repo={health?.active_repo} />
+          <HealthMetricsView
+            key={`health-${health?.active_repo || 'default'}`}
+            repo={health?.active_repo}
+          />
         )}
 
         {activeView === 'brief' && (
-          <WeeklyBriefView repo={health?.active_repo} />
+          <WeeklyBriefView
+            key={`brief-${health?.active_repo || 'default'}`}
+            repo={health?.active_repo}
+          />
         )}
       </main>
 

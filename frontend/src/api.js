@@ -38,7 +38,7 @@ async function callConnect(promise) {
 }
 
 export const api = {
-  health: () => call(client.get("/health")),
+  health: (repo) => call(client.get("/health", { params: repo ? { repo } : {} })),
   connect: (repo, token) => callConnect(client.post("/connect", { repo, token: token || null })),
   syncStatus: (repo) => call(client.get("/sync/status", { params: repo ? { repo } : {} })),
   listRepos: () => call(client.get("/repos")),
