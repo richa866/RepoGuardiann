@@ -104,7 +104,15 @@ export function GitNode({
   const [isInRange, setIsInRange] = useState(true);
 
   const { scene } = useGLTF('/models/smooth_issue_orb.glb');
-  const clonedScene = useMemo(() => scene.clone(true), [scene]);
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone(true);
+    clone.traverse((child) => {
+      if (child.isMesh && child.material) {
+        child.material = child.material.clone();
+      }
+    });
+    return clone;
+  }, [scene]);
 
   const categories = issue?.latest_categories || [];
   const isSecurity = categories.includes('security-sensitive');
