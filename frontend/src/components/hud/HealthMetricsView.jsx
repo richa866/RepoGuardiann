@@ -55,13 +55,25 @@ export function HealthMetricsView({ repo }) {
   const categoryCounts = data?.category_counts || {};
   const pieData = Object.entries(categoryCounts).map(([name, value]) => ({ name, value }));
 
-  const chartData = snapshots.map((s, idx) => ({
-    name: new Date(s.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    backlog: s.open_issues,
-    responseTime: s.avg_response_hours,
-    duplicates: s.duplicate_rate_pct,
-    activeContributors: s.active_contributors_30d,
-  }));
+  const chartData = snapshots.map((s, idx) => {
+    let label = s.name;
+    if (!label) {
+      const raw = s.date || s.ts || s.taken_at;
+      if (raw) {
+        const d = new Date(raw);
+        label = !isNaN(d.getTime()) ? d.toLocaleDateString([], { month: 'short', day: 'numeric' }) : String(raw);
+      } else {
+        label = `Day ${idx + 1}`;
+      }
+    }
+    return {
+      name: label,
+      backlog: s.backlogCount ?? s.open_issues ?? s.backlog_size ?? 0,
+      responseTime: s.avgResponseHrs ?? s.avg_response_hours ?? s.avg_response_time_hours ?? 0,
+      duplicates: s.duplicateRatePct ?? s.duplicate_rate_pct ?? s.duplicate_rate ?? 0,
+      activeContributors: s.activeContributors30d ?? s.active_contributors_30d ?? 0,
+    };
+  });
 
   return (
     <div className="w-full h-full pt-20 pb-6 px-6 max-w-6xl mx-auto flex flex-col space-y-4 overflow-y-auto">

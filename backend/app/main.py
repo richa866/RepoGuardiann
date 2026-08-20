@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from app.api.feedback import router as feedback_router
 from app.api.health import router as health_router
+from app.api.health_trends import router as health_trends_router
 from app.api.issues import router as issues_router
 from app.api.monitor import router as monitor_router
 from app.config import settings
@@ -72,6 +73,7 @@ app.add_middleware(
 
 # Mount modular API routers
 app.include_router(health_router)
+app.include_router(health_trends_router)
 app.include_router(issues_router)
 app.include_router(feedback_router)
 app.include_router(monitor_router)
