@@ -131,7 +131,7 @@ _REPO_AVG_RESPONSE_CACHE: dict[str, tuple[float, float]] = {}  # repo -> (avg_ho
 _REPO_AVG_RESPONSE_CACHE_TTL_SECONDS = 600  # 10 min -- a long-running poller shouldn't serve a stale average forever
 
 
-def _repo_avg_response_hours(repo: str) -> float:
+def repo_avg_response_hours(repo: str) -> float:
     """Average hours between an issue's creation and its first non-author
     (approximated-maintainer, same convention as get_decision_context) reply,
     across every issue in this repo that has received one. Issues with zero
@@ -209,7 +209,7 @@ def response_time_check(repo: str, issue_number: int) -> dict:
     # is_slow is a different signal from is_urgent: not "unresponded past a
     # fixed threshold" but "already waiting longer than this repo's own
     # average first-response time" -- only meaningful while still waiting.
-    repo_avg_hours = _repo_avg_response_hours(repo)
+    repo_avg_hours = repo_avg_response_hours(repo)
     is_slow = (
         not has_maintainer_reply
         and issue.get("state") == "open"

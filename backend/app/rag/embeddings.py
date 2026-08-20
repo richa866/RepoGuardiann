@@ -192,9 +192,11 @@ def embed_all_issues(repo: str | None = None, batch_size: int = 64) -> int:
 
 
 def collection_size(repo: str | None = None) -> int:
-    """Returns the total number of embedded documents in the collection."""
+    """Returns the total number of embedded documents in the collection without loading embedding model."""
     try:
-        return get_collection(COLLECTION_NAME).count()
+        client = _get_client()
+        coll = client.get_or_create_collection(name=COLLECTION_NAME)
+        return coll.count()
     except Exception:
         return 0
 

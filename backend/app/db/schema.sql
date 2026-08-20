@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS escalations (
     evidence_json TEXT NOT NULL DEFAULT '{}',    -- flattened {tool_name: output}, quick lookup by tool
     tool_calls TEXT NOT NULL DEFAULT '[]',       -- ordered [{tool, input, output}, ...] -- the actual trace
     drafted_comment TEXT,
-    human_override TEXT,                         -- NULL | 'confirmed' | 'dismissed'
+    human_override TEXT,                         -- NULL | 'confirmed' | 'dismissed' | 'overridden:<reason>'
+                                                  -- (e.g. 'overridden:false_positive' -- see app/api/feedback.py)
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_escalations_repo_issue ON escalations(repo, issue_number);
@@ -86,6 +87,7 @@ CREATE TABLE IF NOT EXISTS feedback (
     escalation_id INTEGER,
     vote TEXT NOT NULL,                         -- up | down
     note TEXT,
+    override_reason TEXT,                       -- NULL | 'false_positive' | 'wrong_category' | 'not_a_duplicate' | 'low_priority'
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_feedback_repo_issue ON feedback(repo, issue_number);

@@ -1,4 +1,4 @@
-"""Issues API router: GET /issues, GET /issues/{number}, POST /issues/{number}/feedback.
+"""Issues API router: GET /issues, GET /issues/{number}, feedback lives in app/api/feedback.py.
 Implements exact CONTRACTS.md REST specifications with Pydantic response validation.
 """
 from __future__ import annotations
@@ -112,17 +112,7 @@ class IssueDetailResponse(BaseModel):
     similar_issues: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class FeedbackCreateRequest(BaseModel):
-    repo: Optional[str] = None
-    escalation_id: Optional[int] = None
-    vote: str  # "up" | "down"
-    note: Optional[str] = None
 
-
-class FeedbackCreateResponse(BaseModel):
-    status: str = "ok"
-    feedback_id: int
-    message: str = "Feedback successfully recorded"
 
 
 # --- Helpers ---
@@ -227,7 +217,7 @@ def list_issues(
 
     # Query all matching for category post-filtering / count
     all_rows = [dict(r) for r in conn.execute(query, params).fetchall()]
-    
+
     # Process rows
     processed_items: list[IssueListItem] = []
     for r in all_rows:
@@ -399,51 +389,6 @@ def get_issue_detail(number: int, repo: Optional[str] = None):
     )
 
 
-@router.post("/issues/{number}/feedback", response_model=FeedbackCreateResponse)
-def create_issue_feedback(number: int, payload: FeedbackCreateRequest):
-    """POST /issues/{number}/feedback
-    Records human-in-the-loop maintainer feedback.
-    """
-    target = _require_active_repo(payload.repo)
-    conn = get_conn()
-
-    # Validate issue exists, create stub if missing to prevent 404 on demo/seed issues
-    exists = conn.execute(
-        "SELECT 1 FROM issues WHERE repo = ? AND number = ?", (target, number)
-    ).fetchone()
-    if not exists:
-        with tx() as c:
-            c.execute(
-                "INSERT OR IGNORE INTO issues (repo, number, title, body, state, author, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (target, number, f"Issue #{number}", "Automated demo/seed issue", "open", "maintainer", now_iso(), now_iso()),
-            )
-
-    cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO feedback (repo, issue_number, escalation_id, vote, note, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (
-            target,
-            number,
-            payload.escalation_id,
-            payload.vote,
-            payload.note or "",
-            now_iso(),
-        ),
-    )
-    conn.commit()
-    feedback_id = cur.lastrowid
-
-    return FeedbackCreateResponse(
-        status="ok",
-        feedback_id=feedback_id,
-        message="Feedback successfully recorded",
-    )
-
-
 class PostCommentIn(BaseModel):
     body: str
     repo: Optional[str] = None
@@ -554,4 +499,3 @@ def close_issue_endpoint(number: int, body: CloseIssueIn):
         )
 
     return {"status": "closed", "posted_on_github": posted_on_github, "issue_number": number}
-
