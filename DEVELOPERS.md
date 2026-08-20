@@ -276,3 +276,15 @@ blender --background --python scripts/generate_smooth_issue_orb.py
   * Removed "cards-inside-cards" box clutter. Used clean typography, subtle hairline dividers, direct metric highlights, and a clean one-click feedback bar.
 * **Removed Redundant Floating Bars (`App.jsx`)**:
   * Removed duplicate bottom switcher bar, maximizing vertical viewport space for the 3D scene.
+
+### 📍 Milestone 13: Colorful Breathing Nebula & Dynamic Sliding Filter Ribbon
+* **Vibrant Breathing Cosmic Nebula (`NebulaBackground.jsx`)**:
+  * Implemented multi-layered cosmic nebula clouds and 1,400+ stardust particles based on the user's reference palette (Golden amber `#f7d08a`, Jade `#38a388`, Deep Teal `#1b999c`, Midnight Indigo `#28235c`, Cosmic Violet `#591a4f`).
+  * Removed `<gridHelper>` linish floor grid from both 3D scenes in favor of luminous cosmic clouds.
+  * Added subtle breathing pulsation (`sin(time * 0.4)`) with sinusoidal hue and volumetric gas drift.
+* **Dynamic Sliding Filter Ribbon (`DynamicFilterRibbon.jsx`)**:
+  * Positioned at the top-right of the 3D canvas (`top-18 right-4`).
+  * Implemented dynamic pill-shaped sliding segmented controller with smooth icon and shape transitions.
+  * Dynamically changes the cosmic background and lighting color theme based on the active filter (All, Security, Regressions, Contentious, Duplicates, Needs Info).
+* **Smooth Swooshing Telemetry Pill (`MonitorPanel.jsx`)**:
+  * Fluid expansion/collapse animation between the ultra-compact status pill and the slide-over terminal sheet.

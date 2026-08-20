@@ -1,7 +1,8 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Stars, Html, useGLTF } from '@react-three/drei';
+import { OrbitControls, Html, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
+import { NebulaBackground } from './NebulaBackground';
 import { 
   GitBranch, 
   GitCommit, 
@@ -148,7 +149,6 @@ function CrystalCommitNode({ commit, branch, isSelected, onSelect }) {
   const [hovered, setHovered] = useState(false);
   const { scene } = useGLTF('/models/git_branch_node.glb');
 
-  // Clone geometry and set crisp neon materials
   const cloned = useMemo(() => {
     const c = scene.clone(true);
     c.traverse((child) => {
@@ -196,7 +196,6 @@ function CrystalCommitNode({ commit, branch, isSelected, onSelect }) {
     >
       <primitive object={cloned} scale={0.7} />
 
-      {/* Merge Halo Ring */}
       {commit.isMerge && (
         <mesh rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[0.9, 0.04, 16, 32]} />
@@ -204,7 +203,6 @@ function CrystalCommitNode({ commit, branch, isSelected, onSelect }) {
         </mesh>
       )}
 
-      {/* Proportional 3D Transformed Billboard Commit Tag */}
       <Html
         transform
         sprite
@@ -240,7 +238,6 @@ function CrystalCommitNode({ commit, branch, isSelected, onSelect }) {
   );
 }
 
-// Branch Tree Connecting Tubes & Merges
 function TreeBranchConnections({ branches = [] }) {
   const commitMap = useMemo(() => {
     const map = new Map();
@@ -256,7 +253,6 @@ function TreeBranchConnections({ branches = [] }) {
     const list = [];
 
     branches.forEach((b) => {
-      // 1. Sequential commits along the same branch
       for (let i = 0; i < b.commits.length - 1; i++) {
         const p1 = new THREE.Vector3(b.commits[i].x, b.y, b.z);
         const p2 = new THREE.Vector3(b.commits[i + 1].x, b.y, b.z);
@@ -264,7 +260,6 @@ function TreeBranchConnections({ branches = [] }) {
         list.push({ curve, color: b.color });
       }
 
-      // 2. Fork Curve from parent branch
       if (b.forkFrom && b.commits.length > 0) {
         const parent = commitMap.get(b.forkFrom.commitId);
         if (parent) {
@@ -276,7 +271,6 @@ function TreeBranchConnections({ branches = [] }) {
         }
       }
 
-      // 3. Merge Curve back into target branch
       if (b.mergeInto && b.commits.length > 0) {
         const target = commitMap.get(b.mergeInto.commitId);
         const lastCommit = b.commits[b.commits.length - 1];
@@ -313,8 +307,7 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
   const branches = TREE_DATA.branches;
 
   return (
-    <div className="relative w-full h-full bg-[#050811] overflow-hidden select-none">
-      {/* 3D Canvas */}
+    <div className="relative w-full h-full bg-[#040714] overflow-hidden select-none">
       <Canvas
         camera={{ position: [0, 2, 22], fov: 48 }}
         gl={{ antialias: true, alpha: false }}
@@ -323,13 +316,13 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
           setSelectedBranch(null);
         }}
       >
-        <color attach="background" args={['#040711']} />
-        <ambientLight intensity={0.9} />
-        <directionalLight position={[12, 18, 12]} intensity={2.0} color="#e0f2fe" />
-        <pointLight position={[-12, -12, -12]} intensity={1.5} color="#6366f1" />
+        <color attach="background" args={['#040714']} />
+        <ambientLight intensity={1.0} />
+        <directionalLight position={[12, 18, 12]} intensity={2.2} color="#e0f2fe" />
+        <pointLight position={[-12, -12, -12]} intensity={1.6} color="#6366f1" />
 
-        <Stars radius={70} depth={50} count={3000} factor={4} saturation={0.6} fade speed={1} />
-        <gridHelper args={[120, 60, '#1e293b', '#0b1329']} position={[0, -8, 0]} />
+        {/* Breathing Nebula Space Environment (No Grid!) */}
+        <NebulaBackground activeTheme="all" />
 
         {/* Smooth Camera Controller */}
         <SmoothBranchCameraController
@@ -358,7 +351,7 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
           ))
         )}
 
-        {/* Floating 3D Branch Header Badges (Proportionally Scaled) */}
+        {/* Floating 3D Branch Header Badges */}
         {branches.map((b) => (
           <Html
             key={`header-${b.id}`}
@@ -401,9 +394,9 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
         />
       </Canvas>
 
-      {/* Top HUD: Repository Topology Header */}
+      {/* Top HUD: Clean Repository Topology Header */}
       <div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
-        <div className="p-3.5 rounded-2xl glass-panel border border-white/10 backdrop-blur-xl pointer-events-auto space-y-1 shadow-2xl">
+        <div className="p-3 rounded-2xl bg-slate-950/80 border border-white/10 backdrop-blur-xl pointer-events-auto space-y-1 shadow-2xl">
           <div className="flex items-center gap-2">
             <GitBranch className="w-4 h-4 text-sky-400" />
             <h2 className="text-sm font-bold text-slate-100 font-mono">
@@ -414,16 +407,16 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
             </span>
           </div>
           <p className="text-xs text-slate-400 font-mono">
-            Main Backbone with 4 Feature & Release Sub-Branches • Crystal Node Models
+            Main Backbone with 4 Feature & Release Sub-Branches • Crystal Commit Nodes
           </p>
         </div>
 
         {/* Branch Legend */}
-        <div className="hidden lg:flex items-center gap-1.5 p-2 rounded-2xl glass-panel border border-white/10 pointer-events-auto">
+        <div className="hidden lg:flex items-center gap-1.5 p-1.5 rounded-2xl bg-slate-950/80 border border-white/10 pointer-events-auto">
           {branches.map((b) => (
             <div
               key={b.id}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-mono bg-slate-950/70 border border-white/5"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-mono bg-slate-900/60 border border-white/5"
             >
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: b.color }} />
               <span className="text-slate-300 font-medium">{b.name}</span>
@@ -432,9 +425,9 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
         </div>
       </div>
 
-      {/* Selected Commit Detail Card (Bottom-Left) */}
+      {/* Selected Commit Detail Card */}
       {selectedCommit && selectedBranch && (
-        <div className="absolute bottom-28 left-6 z-30 w-80 p-4 rounded-2xl glass-panel-glow border border-sky-500/30 shadow-2xl pointer-events-auto space-y-2 animate-in fade-in slide-in-from-bottom duration-200">
+        <div className="absolute bottom-28 left-6 z-30 w-80 p-4 rounded-2xl bg-slate-950/90 border border-sky-500/30 shadow-2xl pointer-events-auto space-y-2 animate-in fade-in slide-in-from-bottom duration-200 backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-white/10 pb-2">
             <span className="text-xs font-mono font-bold" style={{ color: selectedBranch.color }}>
               commit {selectedCommit.hash}
@@ -463,7 +456,7 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 pointer-events-auto">
         <button
           onClick={onShowIssues}
-          className="group relative flex items-center gap-3 px-8 py-4 rounded-2xl font-mono text-sm font-bold text-white bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:via-rose-500 hover:to-red-600 border border-red-400/80 shadow-[0_0_40px_rgba(239,68,68,0.6)] hover:shadow-[0_0_60px_rgba(239,68,68,0.9)] transition-all duration-300 active:scale-95 animate-bounce cursor-pointer"
+          className="group relative flex items-center gap-3 px-8 py-3.5 rounded-2xl font-mono text-sm font-bold text-white bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:via-rose-500 hover:to-red-600 border border-red-400/80 shadow-[0_0_40px_rgba(239,68,68,0.6)] hover:shadow-[0_0_60px_rgba(239,68,68,0.9)] transition-all duration-300 active:scale-95 animate-bounce cursor-pointer"
         >
           <div className="absolute -inset-1 rounded-2xl bg-red-500/40 blur-lg group-hover:bg-red-500/70 transition opacity-75" />
 

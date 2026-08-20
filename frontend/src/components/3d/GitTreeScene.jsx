@@ -1,16 +1,17 @@
 import React, { useMemo, useRef, useState, useEffect, Suspense, Component } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Stars, Html } from '@react-three/drei';
+import { OrbitControls, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { GitNode } from './GitNode';
+import { NebulaBackground } from './NebulaBackground';
+import { DynamicFilterRibbon } from '../hud/DynamicFilterRibbon';
 import { 
   ShieldAlert, 
   Flame, 
   Copy, 
   HelpCircle, 
   CheckCircle2, 
-  AlertTriangle,
-  Layers
+  AlertTriangle 
 } from 'lucide-react';
 
 class ErrorBoundary3D extends Component {
@@ -84,6 +85,15 @@ const CLUSTERS = {
     icon: CheckCircle2,
     center: [0, -3.0, 0],
   },
+};
+
+const THEME_BACKGROUNDS = {
+  all: '#040714',
+  security_urgent: '#0d0406',
+  regression: '#0a0312',
+  contentious: '#0c0702',
+  duplicates: '#030712',
+  needs_info: '#020c0e',
 };
 
 // Camera Controller that only animates during selection transitions, yielding full control to OrbitControls
@@ -168,7 +178,6 @@ function SceneContent({
   isUserInteracting,
   activeFilter = 'all' 
 }) {
-  // Group and intelligently cap issues per cluster for high performance and clean tree visualization
   const { nodeData, clusterList, connections, selectedPos } = useMemo(() => {
     const clusterMap = {
       security_urgent: [],
@@ -218,7 +227,6 @@ function SceneContent({
           visibleCount: visibleIssues.length,
         });
 
-        // Spacious radial distribution around cluster center
         const cCenter = clusterCfg.center;
         visibleIssues.forEach((issue, idx) => {
           const count = visibleIssues.length;
@@ -237,7 +245,6 @@ function SceneContent({
 
           nodes.push({ issue, position: pos, clusterKey });
 
-          // Intra-cluster connection link
           if (idx > 0) {
             conns.push({
               p1: nodes[nodes.length - 2].position,
@@ -248,7 +255,6 @@ function SceneContent({
           }
         });
 
-        // Connector from cluster center to global hub
         conns.push({
           p1: [0, 0, 0],
           p2: cCenter,
@@ -263,14 +269,14 @@ function SceneContent({
 
   return (
     <>
-      <ambientLight intensity={0.9} />
-      <directionalLight position={[15, 22, 15]} intensity={2.2} color="#e0f2fe" />
-      <pointLight position={[-15, -15, -15]} intensity={1.5} color="#6366f1" />
-      <pointLight position={[0, 12, 10]} intensity={1.8} color="#38bdf8" />
+      {/* Dynamic Cosmic Lighting */}
+      <ambientLight intensity={1.1} />
+      <directionalLight position={[15, 22, 15]} intensity={2.4} color="#e0f2fe" />
+      <pointLight position={[-15, -15, -15]} intensity={1.8} color="#6366f1" />
+      <pointLight position={[0, 12, 10]} intensity={2.0} color="#38bdf8" />
 
-      {/* Starfield & Deep Space Grid */}
-      <Stars radius={90} depth={60} count={3500} factor={4} saturation={0.6} fade speed={1} />
-      <gridHelper args={[160, 80, '#1e293b', '#0b1329']} position={[0, -12, 0]} />
+      {/* Colorful Breathing Nebula Space Environment (No Grid!) */}
+      <NebulaBackground activeTheme={activeFilter} />
 
       {/* Camera Controller */}
       <SmoothCameraController
@@ -351,82 +357,36 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
   const isUserInteracting = useRef(false);
   const [activeFilter, setActiveFilter] = useState('all');
 
+  const countMap = useMemo(() => {
+    const map = {
+      all: issues.length,
+      security_urgent: 0,
+      regression: 0,
+      contentious: 0,
+      duplicates: 0,
+      needs_info: 0,
+    };
+    issues.forEach((i) => {
+      const cats = i.latest_categories || [];
+      if (cats.includes('security-sensitive') || cats.includes('urgent')) map.security_urgent++;
+      if (cats.includes('possible-regression')) map.regression++;
+      if (cats.includes('contentious')) map.contentious++;
+      if (cats.includes('likely-duplicate') || cats.includes('stale/needs-triage')) map.duplicates++;
+      if (cats.includes('needs-more-info')) map.needs_info++;
+    });
+    return map;
+  }, [issues]);
+
+  const bgColor = THEME_BACKGROUNDS[activeFilter] || THEME_BACKGROUNDS.all;
+
   return (
     <div className="w-full h-full relative select-none">
-      {/* Sleek Minimalist Micro-Filter Ribbon (Top-Center) */}
-      <div className="fixed top-18 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 p-1 rounded-full bg-slate-950/70 border border-white/10 shadow-xl backdrop-blur-xl pointer-events-auto">
-        <button
-          onClick={() => setActiveFilter('all')}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono transition ${
-            activeFilter === 'all'
-              ? 'bg-sky-500/20 text-sky-300 font-semibold'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Layers className="w-3 h-3" />
-          <span>All ({issues.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveFilter('security_urgent')}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono transition ${
-            activeFilter === 'security_urgent'
-              ? 'bg-red-950/80 text-red-300 font-semibold border border-red-500/40'
-              : 'text-slate-400 hover:text-red-300'
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-red-500" />
-          <span>Security & Urgent</span>
-        </button>
-
-        <button
-          onClick={() => setActiveFilter('regression')}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono transition ${
-            activeFilter === 'regression'
-              ? 'bg-purple-950/80 text-purple-300 font-semibold border border-purple-500/40'
-              : 'text-slate-400 hover:text-purple-300'
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-purple-500" />
-          <span>Regressions</span>
-        </button>
-
-        <button
-          onClick={() => setActiveFilter('contentious')}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono transition ${
-            activeFilter === 'contentious'
-              ? 'bg-amber-950/80 text-amber-300 font-semibold border border-amber-500/40'
-              : 'text-slate-400 hover:text-amber-300'
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-amber-500" />
-          <span>Contentious</span>
-        </button>
-
-        <button
-          onClick={() => setActiveFilter('duplicates')}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono transition ${
-            activeFilter === 'duplicates'
-              ? 'bg-slate-800 text-slate-200 font-semibold border border-slate-600'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-slate-400" />
-          <span>Duplicates</span>
-        </button>
-
-        <button
-          onClick={() => setActiveFilter('needs_info')}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono transition ${
-            activeFilter === 'needs_info'
-              ? 'bg-cyan-950/80 text-cyan-300 font-semibold border border-cyan-500/40'
-              : 'text-slate-400 hover:text-cyan-300'
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-cyan-400" />
-          <span>Needs Info</span>
-        </button>
-      </div>
+      {/* Dynamic Pill-Shaped Filter Ribbon (Top-Right) */}
+      <DynamicFilterRibbon
+        activeFilter={activeFilter}
+        onSelectFilter={setActiveFilter}
+        countMap={countMap}
+      />
 
       <ErrorBoundary3D fallback={fallback}>
         <Suspense
@@ -434,7 +394,7 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
             <div className="w-full h-full flex items-center justify-center bg-slate-950/80 backdrop-blur-md text-sky-400 font-mono text-sm">
               <div className="flex items-center gap-3">
                 <div className="w-4 h-4 rounded-full border-2 border-sky-400 border-t-transparent animate-spin" />
-                <span>Mapping Spacious Issue Clusters...</span>
+                <span>Mapping Colorful Nebula Clusters...</span>
               </div>
             </div>
           }
@@ -444,7 +404,7 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
             gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
             onPointerMissed={() => onSelectIssue(null)}
           >
-            <color attach="background" args={['#040711']} />
+            <color attach="background" args={[bgColor]} />
             <SceneContent
               issues={issues}
               selectedIssue={selectedIssue}
