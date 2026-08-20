@@ -30,9 +30,10 @@ async def lifespan(app: FastAPI):
     os.makedirs(settings.chroma_path, exist_ok=True)
     init_db()
 
+    # Start background scheduler for monitor polling
     start_scheduler()
 
-    # Optional auto-connect repository from .env on boot
+    # Auto-connect configured target repository on boot if needed
     if settings.github_repo and not get_active_repo():
         def _bootstrap():
             try:
@@ -54,9 +55,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Enable CORS for frontend local development (Vite on http://localhost:5173)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "*",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

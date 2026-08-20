@@ -106,17 +106,7 @@ class IssueDetailResponse(BaseModel):
     similar_issues: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class FeedbackCreateRequest(BaseModel):
-    repo: Optional[str] = None
-    escalation_id: Optional[int] = None
-    vote: str  # "up" | "down"
-    note: Optional[str] = None
 
-
-class FeedbackCreateResponse(BaseModel):
-    status: str = "ok"
-    feedback_id: int
-    message: str = "Feedback successfully recorded"
 
 
 # --- Helpers ---
@@ -386,41 +376,4 @@ def get_issue_detail(number: int, repo: Optional[str] = None):
     )
 
 
-@router.post("/issues/{number}/feedback", response_model=FeedbackCreateResponse)
-def create_issue_feedback(number: int, payload: FeedbackCreateRequest):
-    """POST /issues/{number}/feedback
-    Records human-in-the-loop maintainer feedback.
-    """
-    target = _require_active_repo(payload.repo)
-    conn = get_conn()
 
-    # Validate issue exists
-    exists = conn.execute(
-        "SELECT 1 FROM issues WHERE repo = ? AND number = ?", (target, number)
-    ).fetchone()
-    if not exists:
-        raise HTTPException(status_code=404, detail=f"Issue #{number} not found in {target}")
-
-    cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO feedback (repo, issue_number, escalation_id, vote, note, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (
-            target,
-            number,
-            payload.escalation_id,
-            payload.vote,
-            payload.note or "",
-            now_iso(),
-        ),
-    )
-    conn.commit()
-    feedback_id = cur.lastrowid
-
-    return FeedbackCreateResponse(
-        status="ok",
-        feedback_id=feedback_id,
-        message="Feedback successfully recorded",
-    )
