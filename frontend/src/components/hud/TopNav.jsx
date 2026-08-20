@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GuardianLogo3D } from '../3d/GuardianLogo3D';
 import { 
   GitBranch, 
@@ -28,6 +28,22 @@ export function TopNav({
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [repoDropdownOpen, setRepoDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const mobileRef = useRef(null);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setRepoDropdownOpen(false);
+      }
+      if (mobileRef.current && !mobileRef.current.contains(event.target)) {
+        setMobileMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const views = [
     { id: '3d', label: '3D Triage', icon: Layers },
@@ -41,40 +57,42 @@ export function TopNav({
   const CurrentIcon = currentView.icon;
 
   return (
-    <header className="fixed top-3 sm:top-4 left-3 sm:left-6 right-3 sm:right-6 z-50 flex items-center justify-between px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-full bg-black/50 border border-white/10 shadow-2xl backdrop-blur-3xl transition-all">
-      {/* Brand & Repository Context */}
-      <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+    <header className="fixed top-3 sm:top-4 left-3 sm:left-6 right-3 sm:right-6 z-50 flex items-center justify-between gap-3 sm:gap-6 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-full bg-black/60 border border-white/10 shadow-2xl backdrop-blur-3xl transition-all">
+      {/* Brand & Repository Context (Left Cluster) */}
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
         <GuardianLogo3D className="w-6 h-6 sm:w-7 sm:h-7 shrink-0 cursor-pointer" />
         <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
           <span className="text-xs sm:text-sm font-semibold tracking-tight text-white font-sans shrink-0">
             RepoGuardian
           </span>
-          <span className="text-zinc-600 font-mono text-xs hidden xs:inline">/</span>
-          <div className="relative">
+          <span className="text-zinc-600 font-mono text-xs hidden sm:inline">/</span>
+          
+          {/* Active Repo Capsule */}
+          <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setRepoDropdownOpen(!repoDropdownOpen)}
-              className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-0.5 sm:py-1 rounded-full bg-white/[0.04] hover:bg-white/10 border border-white/10 hover:border-white/25 text-[11px] sm:text-xs font-mono text-zinc-300 min-w-0 transition cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] hover:bg-white/10 border border-white/10 hover:border-white/25 text-xs font-mono text-zinc-300 transition cursor-pointer"
               title="Click to switch active repository"
             >
-              <GitBranch className="w-3 h-3 text-sky-400 shrink-0" />
-              <span className="font-medium text-white truncate max-w-[90px] sm:max-w-[180px]">
+              <GitBranch className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span className="font-medium text-white truncate max-w-[80px] sm:max-w-[120px] md:max-w-[160px]">
                 {health?.active_repo || 'No repo'}
               </span>
-              <span className="text-zinc-600 hidden sm:inline">•</span>
-              <span className="text-zinc-400 hidden sm:inline">{issuesCount}</span>
+              <span className="text-zinc-600 hidden md:inline">•</span>
+              <span className="text-zinc-400 hidden md:inline">{issuesCount}</span>
               {escalatedCount > 0 && (
                 <span className="text-white font-medium flex items-center gap-1 shrink-0 ml-0.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                  <span className="text-zinc-300 hidden md:inline">{escalatedCount}</span>
+                  <span className="text-zinc-300 hidden lg:inline">{escalatedCount}</span>
                 </span>
               )}
-              <ChevronDown className="w-3 h-3 text-zinc-400 ml-0.5" />
+              <ChevronDown className="w-3 h-3 text-zinc-400 ml-0.5 shrink-0" />
             </button>
 
             {/* Repositories Dropdown */}
             {repoDropdownOpen && (
-              <div className="absolute top-8 left-0 w-64 rounded-2xl bg-black/95 border border-white/15 shadow-2xl backdrop-blur-2xl p-2 flex flex-col gap-1 z-50 animate-in fade-in zoom-in-95 duration-150">
-                <div className="px-2.5 py-1 text-[10px] font-mono uppercase text-zinc-500 tracking-wider">
+              <div className="absolute top-full mt-2 left-0 w-64 rounded-2xl bg-zinc-950/95 border border-zinc-700 shadow-2xl backdrop-blur-2xl p-2 flex flex-col gap-1 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-2.5 py-1 text-[10px] font-mono uppercase text-zinc-400 tracking-wider">
                   Connected Repositories
                 </div>
                 {repos.map((r) => {
@@ -94,7 +112,7 @@ export function TopNav({
                       }`}
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <GitBranch className="w-3 h-3 shrink-0" />
+                        <GitBranch className="w-3.5 h-3.5 shrink-0" />
                         <span className="truncate">{rName}</span>
                       </div>
                       {isActive && <span className="text-[10px] text-sky-400 font-bold ml-1">ACTIVE</span>}
@@ -109,7 +127,7 @@ export function TopNav({
                     }}
                     className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-mono text-zinc-400 hover:text-white hover:bg-white/10 transition cursor-pointer"
                   >
-                    <Plus className="w-3 h-3" />
+                    <Plus className="w-3.5 h-3.5" />
                     <span>Connect New Repository...</span>
                   </button>
                 </div>
@@ -119,8 +137,8 @@ export function TopNav({
         </div>
       </div>
 
-      {/* Center View Switcher (Desktop Full Segments) */}
-      <nav className="hidden lg:flex items-center gap-1 p-1 rounded-full bg-white/[0.03] border border-white/10">
+      {/* Center View Switcher (Desktop Segments - cleanly visible on xl/lg without overlap) */}
+      <nav className="hidden xl:flex items-center gap-1 p-1 rounded-full bg-white/[0.03] border border-white/10 shrink-0">
         {views.map((v) => {
           const Icon = v.icon;
           const isActive = activeView === v.id;
@@ -128,7 +146,7 @@ export function TopNav({
             <button
               key={v.id}
               onClick={() => onSelectView(v.id)}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono transition-all duration-200 ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono transition-all duration-200 ${
                 isActive
                   ? 'bg-white text-black font-semibold shadow-sm'
                   : 'text-zinc-400 hover:text-white hover:bg-white/[0.05]'
@@ -141,8 +159,31 @@ export function TopNav({
         })}
       </nav>
 
-      {/* Center View Switcher (Tablet / Mobile Dropdown) */}
-      <div className="lg:hidden relative">
+      {/* Center View Switcher (Medium / Tablet Compact Icon Bar) */}
+      <nav className="hidden md:flex xl:hidden items-center gap-1 p-1 rounded-full bg-white/[0.03] border border-white/10 shrink-0">
+        {views.map((v) => {
+          const Icon = v.icon;
+          const isActive = activeView === v.id;
+          return (
+            <button
+              key={v.id}
+              onClick={() => onSelectView(v.id)}
+              title={v.label}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-mono transition-all duration-200 ${
+                isActive
+                  ? 'bg-white text-black font-semibold shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">{v.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Center View Switcher (Mobile Dropdown) */}
+      <div className="md:hidden relative" ref={mobileRef}>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-xs font-mono text-white"
@@ -153,7 +194,7 @@ export function TopNav({
         </button>
 
         {mobileMenuOpen && (
-          <div className="absolute top-10 left-1/2 -translate-x-1/2 w-44 rounded-2xl bg-black/90 border border-white/15 shadow-2xl backdrop-blur-2xl p-1.5 flex flex-col gap-1 z-50 animate-in fade-in zoom-in-95 duration-150">
+          <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-44 rounded-2xl bg-zinc-950/95 border border-zinc-700 shadow-2xl backdrop-blur-2xl p-1.5 flex flex-col gap-1 z-50 animate-in fade-in zoom-in-95 duration-150">
             {views.map((v) => {
               const Icon = v.icon;
               const isActive = activeView === v.id;
@@ -179,13 +220,13 @@ export function TopNav({
         )}
       </div>
 
-      {/* Right Actions Cluster */}
+      {/* Right Actions Cluster (Properly Spaced & Shrink-0) */}
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
         {/* Sync Action */}
         <button
           onClick={onSync}
           disabled={isSyncing}
-          className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-mono text-zinc-300 hover:text-white bg-white/[0.04] hover:bg-white/10 border border-white/10 transition"
+          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-mono text-zinc-300 hover:text-white bg-white/[0.04] hover:bg-white/10 border border-white/10 transition"
           title="Poll GitHub for updates"
         >
           <RotateCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-white' : 'text-zinc-400'}`} />
@@ -196,17 +237,17 @@ export function TopNav({
         <button
           onClick={onCheckNow}
           disabled={isChecking}
-          className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-mono text-white bg-white/10 hover:bg-white/20 border border-white/20 transition shadow-sm"
+          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-mono text-white bg-white/10 hover:bg-white/20 border border-white/20 transition shadow-sm"
           title="Trigger agentic investigation"
         >
           <Zap className={`w-3.5 h-3.5 ${isChecking ? 'animate-bounce text-white' : 'text-zinc-300'}`} />
-          <span className="hidden sm:inline">{isChecking ? 'Running...' : 'Check Now'}</span>
+          <span className="hidden sm:inline">{isChecking ? 'Checking...' : 'Check'}</span>
         </button>
 
         {/* Connect Repo Action */}
         <button
           onClick={onOpenConnect}
-          className="flex items-center gap-1 px-3 sm:px-4 py-1.5 rounded-full text-xs font-mono font-bold text-black bg-white hover:bg-zinc-200 transition shadow-md"
+          className="flex items-center gap-1 px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-mono font-bold text-black bg-white hover:bg-zinc-200 transition shadow-md"
         >
           <Plus className="w-3.5 h-3.5" />
           <span className="hidden xs:inline">Connect</span>
