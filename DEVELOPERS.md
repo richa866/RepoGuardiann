@@ -317,3 +317,20 @@ blender --background --python scripts/generate_smooth_issue_orb.py
   * Fixed an issue where issues with multiple categories (e.g. `#1673` with `["needs-more-info", "contentious"]`) were being absorbed into earlier `if-else` branches, leaving `clusterMap.needs_info` empty when filtered.
   * Implemented `matchesCategory()` helper in `GitTreeScene.jsx` and updated filtering logic so that when any category filter is clicked, all issues containing that tag are populated and rendered.
   * Verified that clicking `Needs Info` displays issue `#1673` centered in the 3D scene with its turquoise orb and proportional title badge.
+
+### 📍 Milestone 18: Otsuka-Air / Zeroz Minimalist Redesign, 3D Depth Occlusion & Responsive Architecture
+* **Minimalist High-Contrast Design Language**:
+  * Applied Japanese minimalist aesthetics inspired by Otsuka-Air and Zeroz across all HUD components:
+    * Frosted obsidian glass surfaces (`bg-black/50 backdrop-blur-3xl border border-white/10`).
+    * High-contrast typography (pure white `#ffffff` primary text, muted zinc `#71717a` secondary text).
+    * Replaced emojis with clean Lucide SVG icons across all buttons, navigation, and badges.
+* **Genuine WebGL 3D Billboard Tags with Depth Occlusion (`ClusterHeader3D.jsx`)**:
+  * Created native Three.js 3D Billboard mesh for cluster headers with `depthWrite: true` and `depthTest: true`.
+  * Nodes in front (`z > tag.z`) render naturally in front of tags, and nodes behind (`z < tag.z`) are occluded by the tag's frosted backing plane.
+* **Smart Semantic Summaries & Focused Zoom (`GitNode.jsx`)**:
+  * Replaced truncated title words with intelligent semantic summaries (`Security signal: RCE keyword detected`, `Duplicate: 90.7% similar to #1`, `Missing reproduction info`, etc.).
+  * When any node is clicked/selected, all other unselected node labels automatically fade out to keep the zoomed-in camera inspection clean and uncluttered.
+* **Dynamic Fluid Responsiveness Across All Viewports**:
+  * `TopNav.jsx`: Dynamic header with automatic view dropdown on mobile/tablet and truncated repo context.
+  * `DynamicFilterRibbon.jsx`: Collapsible vertical dock with smooth collapse/expand toggle on smaller viewports.
+  * `MonitorPanel.jsx` & `IssueDetailPanel.jsx`: Responsive modals and slide-up sheets with adaptive grids and horizontal scroll safety.

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Sparkles, 
   ShieldAlert, 
@@ -6,7 +6,9 @@ import {
   Flame, 
   Copy, 
   HelpCircle,
-  Layers
+  Layers,
+  ChevronRight,
+  ChevronLeft
 } from 'lucide-react';
 
 export const FILTER_OPTIONS = [
@@ -14,75 +16,71 @@ export const FILTER_OPTIONS = [
     id: 'all',
     label: 'All Matrix',
     icon: Sparkles,
-    color: '#1b999c',
-    glow: 'rgba(27, 153, 156, 0.45)',
-    activeBorder: 'border-teal-400',
-    activeText: 'text-teal-200',
-    activeBg: 'bg-teal-950/90',
+    color: '#38bdf8',
+    dotColor: 'bg-sky-400',
   },
   {
     id: 'security_urgent',
     label: 'Security',
     icon: ShieldAlert,
-    color: '#ef4444',
-    glow: 'rgba(239, 68, 68, 0.55)',
-    activeBorder: 'border-red-500',
-    activeText: 'text-red-200',
-    activeBg: 'bg-red-950/90',
+    color: '#f43f5e',
+    dotColor: 'bg-rose-500',
   },
   {
     id: 'regression',
     label: 'Regressions',
     icon: AlertTriangle,
-    color: '#d946ef',
-    glow: 'rgba(217, 70, 239, 0.55)',
-    activeBorder: 'border-purple-400',
-    activeText: 'text-purple-200',
-    activeBg: 'bg-purple-950/90',
+    color: '#c084fc',
+    dotColor: 'bg-purple-400',
   },
   {
     id: 'contentious',
     label: 'Contentious',
     icon: Flame,
-    color: '#f59e0b',
-    glow: 'rgba(245, 158, 11, 0.55)',
-    activeBorder: 'border-amber-400',
-    activeText: 'text-amber-200',
-    activeBg: 'bg-amber-950/90',
+    color: '#fbbf24',
+    dotColor: 'bg-amber-400',
   },
   {
     id: 'duplicates',
     label: 'Duplicates',
     icon: Copy,
     color: '#94a3b8',
-    glow: 'rgba(148, 163, 184, 0.45)',
-    activeBorder: 'border-slate-400',
-    activeText: 'text-slate-200',
-    activeBg: 'bg-slate-800/90',
+    dotColor: 'bg-slate-400',
   },
   {
     id: 'needs_info',
     label: 'Needs Info',
     icon: HelpCircle,
-    color: '#06b6d4',
-    glow: 'rgba(6, 182, 212, 0.55)',
-    activeBorder: 'border-cyan-400',
-    activeText: 'text-cyan-200',
-    activeBg: 'bg-cyan-950/90',
+    color: '#2dd4bf',
+    dotColor: 'bg-teal-400',
   },
 ];
 
 export function DynamicFilterRibbon({ activeFilter = 'all', onSelectFilter, countMap = {} }) {
+  const [collapsed, setCollapsed] = useState(false);
+
   return (
-    <aside className="fixed top-24 right-6 z-40 flex flex-col p-1.5 rounded-3xl bg-slate-950/85 border border-white/10 shadow-2xl backdrop-blur-2xl pointer-events-auto">
-      {/* Header Label */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 mb-1 border-b border-white/5 text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">
-        <Layers className="w-3 h-3 text-sky-400" />
-        <span>Triage Matrix</span>
+    <aside className="fixed top-20 sm:top-24 right-3 sm:right-6 z-40 flex flex-col p-1.5 sm:p-2 rounded-3xl bg-black/50 border border-white/10 shadow-2xl backdrop-blur-3xl pointer-events-auto transition-all max-h-[calc(100vh-140px)]">
+      {/* Header Label / Collapse Toggle */}
+      <div className="flex items-center justify-between px-2 sm:px-3 py-1 mb-1 border-b border-white/[0.08] text-[10px] font-mono uppercase tracking-widest text-zinc-400">
+        {!collapsed && (
+          <span className="flex items-center gap-1.5 font-bold">
+            <Layers className="w-3 h-3 text-zinc-300" />
+            <span className="hidden sm:inline">Filter Matrix</span>
+            <span className="sm:hidden">Filters</span>
+          </span>
+        )}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="p-1 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition ml-auto"
+          title={collapsed ? "Expand Filters" : "Collapse Filters"}
+        >
+          {collapsed ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        </button>
       </div>
 
       {/* Vertical Slider Stack */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 overflow-y-auto max-h-[60vh] pr-0.5">
         {FILTER_OPTIONS.map((opt) => {
           const Icon = opt.icon;
           const isActive = activeFilter === opt.id;
@@ -92,31 +90,30 @@ export function DynamicFilterRibbon({ activeFilter = 'all', onSelectFilter, coun
             <button
               key={opt.id}
               onClick={() => onSelectFilter(opt.id)}
-              className={`group relative flex items-center justify-between gap-3 px-3 py-2 rounded-2xl text-xs font-mono transition-all duration-300 ${
+              title={opt.label}
+              className={`group relative flex items-center justify-between gap-2.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl text-xs font-mono transition-all duration-200 ${
                 isActive
-                  ? `${opt.activeBg} ${opt.activeText} border ${opt.activeBorder} shadow-lg scale-102 font-bold`
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+                  ? 'bg-white text-black font-bold shadow-lg scale-[1.02]'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/[0.06] border border-transparent'
               }`}
-              style={{
-                boxShadow: isActive ? `0 0 25px ${opt.glow}` : undefined,
-              }}
             >
               <div className="flex items-center gap-2">
-                <Icon
-                  className={`w-4 h-4 transition-transform duration-300 ${
-                    isActive ? 'scale-110 rotate-3' : 'opacity-70 group-hover:opacity-100'
+                <span
+                  className={`w-1.5 h-1.5 rounded-full shrink-0 transition-all ${
+                    isActive ? 'bg-black scale-125' : opt.dotColor
                   }`}
-                  style={{ color: opt.color }}
                 />
-                <span className="whitespace-nowrap font-medium">{opt.label}</span>
+                {!collapsed && (
+                  <span className="whitespace-nowrap tracking-tight">{opt.label}</span>
+                )}
               </div>
 
-              {count !== undefined && count > 0 && (
+              {!collapsed && count !== undefined && count > 0 && (
                 <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full transition-colors font-mono font-bold ${
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono transition-colors ml-1 ${
                     isActive
-                      ? 'bg-white/20 text-white'
-                      : 'bg-white/5 text-slate-400 group-hover:text-slate-200'
+                      ? 'bg-black/15 text-black font-bold'
+                      : 'bg-white/[0.06] text-zinc-400 group-hover:text-zinc-200'
                   }`}
                 >
                   {count}

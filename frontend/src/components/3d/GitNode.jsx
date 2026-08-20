@@ -3,7 +3,36 @@ import { useFrame } from '@react-three/fiber';
 import { useGLTF, Html } from '@react-three/drei';
 import * as THREE from 'three';
 
-export function GitNode({ issue, position, isSelected, onSelect }) {
+function getIssueSummary(issue) {
+  if (!issue) return '';
+  const exp = issue.latest_explanation;
+  if (exp) {
+    if (exp.includes('Security keyword')) {
+      const match = exp.match(/Security keyword '([^']+)'/i);
+      if (match) return `Security signal: ${match[1].toUpperCase()} keyword detected`;
+    }
+    if (exp.includes('similar to')) {
+      const match = exp.match(/(\d+\.?\d*%\s+similar\s+to\s+(?:closed\s+issue\s+|issue\s+)?#\d+)/i);
+      if (match) return `Duplicate: ${match[1]}`;
+    }
+    if (exp.includes('missing reproduction') || exp.includes('missing environment')) {
+      return 'Missing reproduction & environment info';
+    }
+    if (exp.includes('Pushback language') || exp.includes('Active back-and-forth')) {
+      return 'High contention & pushback in discussion';
+    }
+    if (exp.includes('No maintainer response')) {
+      const match = exp.match(/No maintainer response in (\d+\s+days)/i);
+      if (match) return `Unanswered for ${match[1]}`;
+    }
+  }
+
+  let title = issue.title || '';
+  title = title.replace(/^\[[^\]]+\]\s*/, '').replace(/^(?:fix|feat|chore|bug|sec|doc|refactor)\([^)]+\):\s*/i, '');
+  return title.length > 55 ? title.slice(0, 52) + '...' : title;
+}
+
+export function GitNode({ issue, position, isSelected, selectedIssue, onSelect }) {
   const groupRef = useRef();
   const [hovered, setHovered] = useState(false);
 
@@ -35,6 +64,9 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
     categories.includes('needs_info') ||
     categories.some(c => typeof c === 'string' && c.toLowerCase().includes('info'));
   const isEscalated = Boolean(issue?.latest_escalate || isSecurity || isUrgent || isRegression || isContentious || isNeedsInfo);
+
+  // Check if another node is selected in the scene
+  const isOtherSelected = Boolean(selectedIssue && (selectedIssue.number !== issue.number || selectedIssue.repo !== issue.repo));
 
   const { color, glowColor, baseIntensity, pulseSpeed, opacity } = useMemo(() => {
     if (isSecurity) {
@@ -91,7 +123,6 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
         opacity: 0.5,
       };
     }
-    // Normal open issue
     return {
       color: new THREE.Color('#10b981'),
       glowColor: new THREE.Color('#34d399'),
@@ -118,20 +149,16 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
     });
   }, [clonedScene, color, glowColor, baseIntensity, opacity]);
 
-  // Animation loop: smooth bobbing, orbital rotation & dynamic glow pulse
   useFrame((state) => {
     if (!groupRef.current) return;
     const t = state.clock.getElapsedTime();
 
-    // Smooth floating bob
     const yOffset = Math.sin(t * 1.5 + position[0] * 0.4) * 0.15;
     groupRef.current.position.y = position[1] + yOffset;
 
-    // Smooth continuous rotation
     groupRef.current.rotation.y += 0.01;
     groupRef.current.rotation.x = Math.sin(t * 0.6) * 0.05;
 
-    // Pulse emission intensity
     if (pulseSpeed > 0) {
       const pulse = Math.sin(t * pulseSpeed) * 0.5 + 0.5;
       const currentIntensity = baseIntensity * (0.75 + 0.5 * pulse);
@@ -146,7 +173,6 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
       });
     }
 
-    // Smooth scaling on hover/select
     const targetScale = isSelected ? 1.35 : hovered ? 1.2 : 1.0;
     groupRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
   });
@@ -156,6 +182,11 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
     : isNeedsInfo
     ? 'needs-info'
     : 'open';
+
+  const summaryText = getIssueSummary(issue);
+
+  // When another node is selected, hide this node's text completely to keep the view clean
+  const showLabel = (!isOtherSelected || isSelected || hovered);
 
   return (
     <group
@@ -177,75 +208,69 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
     >
       <primitive object={clonedScene} scale={0.75} />
 
-      {/* Selected Halo Ring */}
+      {/* Selected Minimalist Ring */}
       {isSelected && (
         <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[1.25, 1.45, 32]} />
-          <meshBasicMaterial color="#38bdf8" side={THREE.DoubleSide} transparent opacity={0.9} />
+          <ringGeometry args={[1.25, 1.4, 32]} />
+          <meshBasicMaterial color="#ffffff" side={THREE.DoubleSide} transparent opacity={0.9} />
         </mesh>
       )}
 
-      {/* Proportional 3D Transformed Billboard Label with zIndexRange to stay behind HUD */}
-      <Html
-        transform
-        sprite
-        position={[0, 1.65, 0]}
-        distanceFactor={11}
-        zIndexRange={[1, 10]}
-        className="pointer-events-none select-none"
-      >
-        <div
-          className={`flex flex-col gap-1 p-2 rounded-2xl font-mono backdrop-blur-2xl border shadow-2xl transition-all ${
-            isEscalated || hovered || isSelected ? 'w-52' : 'w-24 text-center'
-          } ${
-            isSelected
-              ? 'bg-slate-950/95 text-white border-sky-400 scale-105 shadow-[0_0_25px_rgba(56,189,248,0.5)]'
-              : hovered
-              ? 'bg-slate-900/95 text-white border-slate-400 scale-105 shadow-2xl'
-              : 'bg-slate-950/85 text-slate-200 border-white/15'
-          }`}
+      {/* Minimalist 3D Transformed Billboard Label (Hidden when other node is selected) */}
+      {showLabel && (
+        <Html
+          transform
+          sprite
+          position={[0, 1.65, 0]}
+          distanceFactor={11}
+          zIndexRange={[1, 10]}
+          className="pointer-events-none select-none"
         >
-          {/* Header Row */}
-          <div className="flex items-center justify-between gap-1.5">
-            <div className="flex items-center gap-1.5 font-bold">
-              <span
-                className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
-                style={{ backgroundColor: `#${color.getHexString()}` }}
-              />
-              <span className="text-white font-mono text-xs font-bold">#{issue?.number}</span>
+          <div
+            className={`flex flex-col gap-1 p-2.5 rounded-2xl font-mono backdrop-blur-3xl border transition-all ${
+              isEscalated || hovered || isSelected ? 'w-56' : 'w-24 text-center'
+            } ${
+              isSelected
+                ? 'bg-white text-black border-white shadow-[0_0_30px_rgba(255,255,255,0.4)] scale-105'
+                : hovered
+                ? 'bg-black/85 text-white border-white/40 scale-105 shadow-2xl'
+                : 'bg-black/60 text-zinc-200 border-white/10'
+            }`}
+          >
+            {/* Header Row */}
+            <div className="flex items-center justify-between gap-1.5">
+              <div className="flex items-center gap-1.5 font-bold">
+                <span
+                  className="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                  style={{ backgroundColor: isSelected ? '#000000' : `#${color.getHexString()}` }}
+                />
+                <span className={`font-mono text-xs font-bold ${isSelected ? 'text-black' : 'text-white'}`}>
+                  #{issue?.number}
+                </span>
+              </div>
+
+              {(isEscalated || hovered || isSelected) && (
+                <span
+                  className={`text-[9px] uppercase font-mono px-2 py-0.5 rounded-full ${
+                    isSelected
+                      ? 'bg-black text-white font-bold'
+                      : 'bg-white/10 text-zinc-300 border border-white/15'
+                  }`}
+                >
+                  {categoryLabel}
+                </span>
+              )}
             </div>
 
+            {/* Appropriate Concise Summary */}
             {(isEscalated || hovered || isSelected) && (
-              <span
-                className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-md ${
-                  isSecurity
-                    ? 'bg-red-950 text-red-200 border border-red-500/60'
-                    : isContentious
-                    ? 'bg-amber-950 text-amber-200 border border-amber-500/60'
-                    : isRegression
-                    ? 'bg-purple-950 text-purple-200 border border-purple-500/60'
-                    : isUrgent
-                    ? 'bg-orange-950 text-orange-200 border border-orange-500/60'
-                    : isNeedsInfo
-                    ? 'bg-cyan-950 text-cyan-200 border border-cyan-500/60'
-                    : isDuplicate
-                    ? 'bg-slate-800 text-slate-300 border border-slate-600'
-                    : 'bg-emerald-950 text-emerald-200 border border-emerald-500/60'
-                }`}
-              >
-                {categoryLabel}
-              </span>
+              <div className={`text-[11px] font-sans font-medium leading-tight ${isSelected ? 'text-zinc-900' : 'text-zinc-300'}`}>
+                {summaryText}
+              </div>
             )}
           </div>
-
-          {/* Issue Title Preview (shown for escalated, hovered, or selected nodes) */}
-          {(isEscalated || hovered || isSelected) && (
-            <div className="text-[11px] text-slate-300 font-sans font-medium truncate leading-tight">
-              {issue?.title}
-            </div>
-          )}
-        </div>
-      </Html>
+        </Html>
+      )}
     </group>
   );
 }

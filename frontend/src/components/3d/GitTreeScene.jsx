@@ -1,9 +1,10 @@
 import React, { useMemo, useRef, useState, useEffect, Suspense, Component } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Html } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { GitNode } from './GitNode';
 import { NebulaBackground } from './NebulaBackground';
+import { ClusterHeader3D } from './ClusterHeader3D';
 import { DynamicFilterRibbon } from '../hud/DynamicFilterRibbon';
 import { 
   ShieldAlert, 
@@ -31,9 +32,9 @@ class ErrorBoundary3D extends Component {
   render() {
     if (this.state.hasError) {
       return this.props.fallback || (
-        <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-950 p-6">
+        <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 bg-black p-6">
           <p className="text-sm font-mono text-amber-400 mb-2">3D Acceleration Unavailable</p>
-          <p className="text-xs text-slate-500">Falling back to 2D HUD mode...</p>
+          <p className="text-xs text-zinc-500">Falling back to 2D HUD mode...</p>
         </div>
       );
     }
@@ -46,35 +47,35 @@ export const CLUSTERS = {
   security_urgent: {
     id: 'security_urgent',
     name: 'Security & Urgent Hub',
-    color: '#ef4444',
+    color: '#f43f5e',
     icon: ShieldAlert,
     center: [0, 8.5, 0],
   },
   regression: {
     id: 'regression',
     name: 'Historical Regressions',
-    color: '#d946ef',
+    color: '#c084fc',
     icon: AlertTriangle,
     center: [-14.5, 4.5, -4.5],
   },
   contentious: {
     id: 'contentious',
     name: 'Contentious Proposals',
-    color: '#f59e0b',
+    color: '#fbbf24',
     icon: Flame,
     center: [14.5, 3.5, 4.5],
   },
   duplicates: {
     id: 'duplicates',
     name: 'Semantic Duplicates',
-    color: '#64748b',
+    color: '#94a3b8',
     icon: Copy,
     center: [12.5, -8.5, -4.5],
   },
   needs_info: {
     id: 'needs_info',
     name: 'Missing Information',
-    color: '#06b6d4',
+    color: '#2dd4bf',
     icon: HelpCircle,
     center: [-12.5, -8.5, 4.5],
   },
@@ -131,7 +132,6 @@ function SmoothCameraController({ selectedPosition, activeFilter, isUserInteract
 
   useEffect(() => {
     if (selectedPosition) {
-      // 1. Focus on specific selected node
       targetLookAt.current.set(selectedPosition[0], selectedPosition[1], selectedPosition[2]);
       targetCamPos.current.set(
         selectedPosition[0],
@@ -141,14 +141,12 @@ function SmoothCameraController({ selectedPosition, activeFilter, isUserInteract
       animating.current = true;
       animationFrames.current = 45;
     } else if (activeFilter !== 'all' && CLUSTERS[activeFilter]) {
-      // 2. Pan and center the isolated cluster
       const c = CLUSTERS[activeFilter].center;
       targetLookAt.current.set(c[0], c[1], c[2]);
       targetCamPos.current.set(c[0], c[1] + 0.8, c[2] + 18.0);
       animating.current = true;
       animationFrames.current = 45;
     } else {
-      // 3. Reset to overview
       targetLookAt.current.set(0, 0, 0);
       targetCamPos.current.set(0, 4, 34);
       animating.current = true;
@@ -223,7 +221,6 @@ function SceneContent({
     };
 
     if (activeFilter !== 'all') {
-      // Direct category filtering: all issues matching the active filter are included
       issues.forEach((issue) => {
         const cats = issue.latest_categories || [];
         if (matchesCategory(cats, activeFilter)) {
@@ -231,7 +228,6 @@ function SceneContent({
         }
       });
     } else {
-      // Global overview: map each issue into its primary cluster
       issues.forEach((issue) => {
         const cats = issue.latest_categories || [];
         if (matchesCategory(cats, 'security_urgent')) {
@@ -341,41 +337,20 @@ function SceneContent({
             issue={issue}
             position={position}
             isSelected={selectedIssue?.number === issue.number && selectedIssue?.repo === issue.repo}
+            selectedIssue={selectedIssue}
             onSelect={onSelectIssue}
           />
         ))}
       </group>
 
-      {/* Floating 3D Cluster Header Badges */}
-      {clusterList.map((c) => {
-        const Icon = c.icon;
-        return (
-          <Html
-            key={`cluster-${c.id}`}
-            transform
-            sprite
-            position={[c.center[0], c.center[1] + 2.8, c.center[2]]}
-            distanceFactor={14}
-            zIndexRange={[1, 10]}
-            className="pointer-events-none select-none"
-          >
-            <div
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono font-bold backdrop-blur-xl border shadow-xl uppercase tracking-wider whitespace-nowrap"
-              style={{
-                backgroundColor: 'rgba(5, 8, 17, 0.88)',
-                borderColor: c.color,
-                color: c.color,
-              }}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{c.name}</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-white/10 text-slate-200 text-[10px]">
-                {c.totalCount}
-              </span>
-            </div>
-          </Html>
-        );
-      })}
+      {/* Genuine WebGL 3D Billboard Cluster Header Badges with Depth Occlusion (Hidden during node inspection to keep view clean) */}
+      {!selectedIssue && clusterList.map((c) => (
+        <ClusterHeader3D
+          key={`cluster-${c.id}`}
+          cluster={c}
+          position={[c.center[0], c.center[1] + 2.8, c.center[2]]}
+        />
+      ))}
 
       <OrbitControls
         ref={controlsRef}
@@ -436,16 +411,17 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
       <ErrorBoundary3D fallback={fallback}>
         <Suspense
           fallback={
-            <div className="w-full h-full flex items-center justify-center bg-slate-950/80 backdrop-blur-md text-sky-400 font-mono text-sm">
+            <div className="w-full h-full flex items-center justify-center bg-black/80 backdrop-blur-md text-zinc-400 font-mono text-sm">
               <div className="flex items-center gap-3">
-                <div className="w-4 h-4 rounded-full border-2 border-sky-400 border-t-transparent animate-spin" />
-                <span>Mapping Colorful Nebula Clusters...</span>
+                <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                <span>Mapping 3D Cluster Matrix...</span>
               </div>
             </div>
           }
         >
           <Canvas
             camera={{ position: [0, 4, 34], fov: 50 }}
+            dpr={[1, 2]}
             gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
             onPointerMissed={() => onSelectIssue(null)}
           >
