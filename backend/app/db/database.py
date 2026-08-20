@@ -1,4 +1,6 @@
-"""SQLite access layer. Plain sqlite3 (no ORM) -- matches CONTRACTS.md.
+"""SQLite database access layer.
+Plain stdlib sqlite3 connection helper (WAL mode, row_factory = sqlite3.Row) — no ORM.
+Matches CONTRACTS.md specification.
 """
 from __future__ import annotations
 
@@ -12,28 +14,40 @@ from pathlib import Path
 from app.config import settings
 
 _local = threading.local()
-SCHEMA_VERSION = 2
 SCHEMA_FILE = Path(__file__).resolve().parent / "schema.sql"
 
-DATA_TABLES = [
-    "issues", "comments", "subtasks", "escalations", "feedback",
-    "health_snapshots", "monitor_log", "repos",
-]
+
+def get_db_path() -> str:
+    """Resolve database path from settings.database_path -- the single source
+    of truth every other module (and tests, via monkeypatching this exact
+    attribute) already relies on. config.py resolves it to an absolute path
+    and creates its parent dir at import time; re-reading DATABASE_PATH from
+    the environment here directly, instead of through settings, would silently
+    ignore any runtime override of settings.database_path (e.g. test
+    isolation fixtures) since env vars don't change after the process starts."""
+    p = Path(settings.database_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return str(p)
 
 
-def get_conn() -> sqlite3.Connection:
+def get_conn(db_path: str | None = None) -> sqlite3.Connection:
+    """Get thread-local SQLite connection with WAL mode and sqlite3.Row factory."""
     conn = getattr(_local, "conn", None)
     if conn is None:
-        conn = sqlite3.connect(settings.database_path, check_same_thread=False)
+        target_path = db_path or get_db_path()
+        Path(target_path).parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(target_path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA foreign_keys = ON;")
         _local.conn = conn
     return conn
 
 
 @contextmanager
-def tx():
-    conn = get_conn()
+def tx(db_path: str | None = None):
+    """Transaction context manager for atomic database operations."""
+    conn = get_conn(db_path)
     try:
         yield conn
         conn.commit()
@@ -42,26 +56,51 @@ def tx():
         raise
 
 
-def init_db() -> None:
-    conn = get_conn()
-    current_version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if current_version != SCHEMA_VERSION:
-        conn.execute("PRAGMA foreign_keys = OFF")
-        for table in DATA_TABLES:
-            conn.execute(f"DROP TABLE IF EXISTS {table}")
-        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-        conn.commit()
-        conn.execute("PRAGMA foreign_keys = ON")
+def init_db(db_path: str | None = None) -> sqlite3.Connection:
+    """Initialize database tables and indexes from schema.sql if they do not exist yet."""
+    conn = get_conn(db_path)
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA foreign_keys = ON;")
+
+    # Additive migration for a column added after a table may already exist on
+    # disk (schema.sql's CREATE TABLE IF NOT EXISTS is a no-op for those).
+    # Must run BEFORE executescript: schema.sql's own
+    # "CREATE INDEX idx_subtasks_dedupe ON subtasks(dedupe_key)" would raise
+    # "no such column" against a pre-existing subtasks table that predates
+    # this column. ALTER TABLE can't add UNIQUE directly, so a separate
+    # unique index enforces it -- required for enqueue_subtask's
+    # INSERT OR IGNORE dedup to actually work on a migrated (not fresh) DB.
+    # Both statements are no-ops on a brand-new DB (table doesn't exist yet;
+    # executescript's CREATE TABLE defines the column correctly from scratch).
+    try:
+        conn.execute("ALTER TABLE subtasks ADD COLUMN dedupe_key TEXT;")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_subtasks_dedupe_key_unique ON subtasks(dedupe_key);")
+    except sqlite3.OperationalError:
+        pass
 
     if SCHEMA_FILE.exists():
-        schema_sql = SCHEMA_FILE.read_text()
+        schema_sql = SCHEMA_FILE.read_text(encoding="utf-8")
     else:
-        from app.database import SCHEMA as schema_sql  # fallback
+        raise FileNotFoundError(f"schema.sql not found at {SCHEMA_FILE}")
+
     conn.executescript(schema_sql)
+    try:
+        conn.execute("ALTER TABLE comments ADD COLUMN is_maintainer INTEGER NOT NULL DEFAULT 0;")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE escalations ADD COLUMN tool_calls TEXT NOT NULL DEFAULT '[]';")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
+    return conn
 
 
 def now_iso() -> str:
+    """Return current UTC timestamp in ISO 8601 format."""
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -76,6 +115,36 @@ def set_meta(key: str, value: str) -> None:
             "INSERT INTO sync_meta (key, value) VALUES (?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, value),
+        )
+
+
+def start_monitor_run(repo: str) -> int:
+    """monitor_runs is the structured per-cycle audit trail (new/updated issue
+    counts, subtasks created, status) that GET /monitor/status is meant to
+    show -- distinct from monitor_log, which is just a flat event stream with
+    no counts. Call this at the start of a poll cycle, then finish_monitor_run
+    once it's known whether the cycle succeeded."""
+    with tx() as c:
+        cur = c.execute(
+            "INSERT INTO monitor_runs (repo, started_at, status) VALUES (?, ?, 'running')",
+            (repo, now_iso()),
+        )
+        return cur.lastrowid
+
+
+def finish_monitor_run(
+    run_id: int,
+    status: str,
+    new_issues: int = 0,
+    updated_issues: int = 0,
+    subtasks_created: int = 0,
+    error: str | None = None,
+) -> None:
+    with tx() as c:
+        c.execute(
+            "UPDATE monitor_runs SET finished_at = ?, status = ?, new_issues_count = ?, "
+            "updated_issues_count = ?, subtasks_created_count = ?, error = ? WHERE id = ?",
+            (now_iso(), status, new_issues, updated_issues, subtasks_created, error, run_id),
         )
 
 
@@ -131,20 +200,50 @@ def replace_comments(repo: str, issue_number: int, comments: list[dict]) -> None
     with tx() as c:
         c.execute("DELETE FROM comments WHERE repo = ? AND issue_number = ?", (repo, issue_number))
         c.executemany(
-            "INSERT INTO comments (repo, issue_number, github_comment_id, author, body, created_at) "
-            "VALUES (:repo, :issue_number, :github_comment_id, :author, :body, :created_at)",
-            [{**cm, "repo": repo, "issue_number": issue_number} for cm in comments],
+            "INSERT INTO comments (repo, issue_number, github_comment_id, author, body, created_at, is_maintainer) "
+            "VALUES (:repo, :issue_number, :github_comment_id, :author, :body, :created_at, :is_maintainer)",
+            [{**cm, "repo": repo, "issue_number": issue_number, "is_maintainer": int(cm.get("is_maintainer", 0))} for cm in comments],
         )
 
 
-def enqueue_subtask(repo: str, task_type: str, issue_number: int | None = None) -> int:
+def enqueue_subtask(
+    repo: str,
+    task_type: str,
+    issue_number: int | None = None,
+    issue_updated_at: str | None = None,
+) -> tuple[int, bool]:
+    """Idempotent: re-polling the same unchanged issue (or re-triggering a repo-wide
+    check within the same UTC day) is a no-op instead of piling up duplicate rows.
+    Returns (id, created) -- id of the queued subtask (either the one just
+    inserted, or the existing one that made this call a no-op), and whether
+    this call actually inserted a new row. Callers counting "subtasks
+    created" for a summary/audit trail need created, not just an id -- an id
+    is returned either way, so counting calls instead of checking created
+    silently overcounts by the number of no-op dedupe hits.
+
+    dedupe_key is always computed here, never accepted from the caller -- an
+    earlier version of this on another branch defaulted to
+    f"...#{now_iso()}" when no key was passed, which is unique on every call
+    and silently defeats deduplication entirely for any caller that doesn't
+    thread a key through by hand."""
+    if issue_number is not None:
+        dedupe_key = f"{repo}|{issue_number}|{task_type}|{issue_updated_at or ''}"
+    else:
+        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        dedupe_key = f"{repo}|None|{task_type}|{day}"
+
     with tx() as c:
         cur = c.execute(
-            "INSERT INTO subtasks (repo, issue_number, task_type, status, created_at) "
-            "VALUES (?, ?, ?, 'pending', ?)",
-            (repo, issue_number, task_type, now_iso()),
+            "INSERT OR IGNORE INTO subtasks (repo, issue_number, task_type, status, created_at, dedupe_key) "
+            "VALUES (?, ?, ?, 'pending', ?, ?)",
+            (repo, issue_number, task_type, now_iso(), dedupe_key),
         )
-        return cur.lastrowid
+        if cur.rowcount == 0:
+            existing = c.execute(
+                "SELECT id FROM subtasks WHERE dedupe_key = ?", (dedupe_key,)
+            ).fetchone()
+            return (existing["id"] if existing else -1), False
+        return cur.lastrowid, True
 
 
 def upsert_repo(repo: str, token: str | None) -> None:

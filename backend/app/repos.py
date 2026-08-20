@@ -17,21 +17,22 @@ import threading
 import uuid
 
 from app.config import settings
-from app.database import (
+from app.db.database import (
     get_repo_row,
     log_monitor_event,
     set_active_repo,
     set_sync_state,
     upsert_repo,
 )
-from app.github_client import (
+from app.github.client import (
     GitHubClient,
     RateLimitError,
     RepoNotFoundError,
     RepoPrivateError,
     TokenInvalidError,
 )
-from app.sync import run_sync
+from app.github.fetch import run_sync
+from app.monitor.processor import process_pending_subtasks
 
 logger = logging.getLogger("repoguardian.repos")
 
@@ -54,14 +55,12 @@ class ConnectError(Exception):
 def _run_background_sync(repo: str, token: str | None, sync_id: str) -> None:
     global _sync_in_progress
     try:
-        run_sync(repo, token, max_items=settings.connect_sync_max_items, track_progress=True)
+        run_sync(repo, token=token, max_items=settings.connect_sync_max_items)
 
         set_sync_state(repo, stage="running_initial_analysis", current=0, total=0)
-        from app.monitor import process_subtask_queue
-
         total_processed = 0
         while True:
-            processed = process_subtask_queue(repo=repo, limit=25)
+            processed = process_pending_subtasks(repo, limit=25)
             total_processed += processed
             set_sync_state(repo, current=total_processed)
             if processed == 0:
@@ -96,9 +95,9 @@ def connect_repo(repo: str, token: str | None) -> dict:
         _sync_in_progress = repo  # reserve the slot before the network call
 
     try:
-        client = GitHubClient(token or None, repo)
+        client = GitHubClient(token or None)
         try:
-            meta = client.validate_repo()
+            meta = client.validate_repo(repo)
         except RepoNotFoundError as exc:
             raise ConnectError(404, "not_found", str(exc)) from exc
         except TokenInvalidError as exc:
@@ -142,10 +141,10 @@ def connect_repo(repo: str, token: str | None) -> dict:
         with _sync_lock:
             _sync_in_progress = None
         raise
-    except Exception:
+    except Exception as exc:
         with _sync_lock:
             _sync_in_progress = None
-        raise
+        raise ConnectError(502, "github_unreachable", f"GitHub API request failed: {exc}") from exc
 
 
 def get_sync_status(repo: str) -> dict:

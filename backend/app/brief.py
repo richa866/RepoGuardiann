@@ -9,7 +9,7 @@ import json
 import logging
 
 from app.config import ConfigError, settings
-from app.database import get_conn
+from app.db.database import get_conn
 
 logger = logging.getLogger("repoguardian.brief")
 

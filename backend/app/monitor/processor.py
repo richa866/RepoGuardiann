@@ -6,7 +6,6 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from app.agent.synthesis import evaluate_issue
-from app.agent.tools import duplicate_check, missing_info_check
 from app.db.database import get_conn, log_monitor_event, now_iso, tx
 from app.monitor.queue import (
     get_pending_subtasks,
@@ -80,17 +79,18 @@ def process_one_subtask(subtask: dict) -> dict:
     issue_number = subtask["issue_number"]
     task_type = subtask["task_type"]
 
-    mark_subtask_started(subtask_id)
     try:
-        if task_type == "duplicate_check" and issue_number:
-            res = duplicate_check(repo, issue_number)
-            evaluate_issue(repo, issue_number)
-            mark_subtask_done(subtask_id, res, f"Ran duplicate check for #{issue_number}")
-            return res
-
-        elif task_type == "missing_info_check" and issue_number:
-            res = missing_info_check(repo, issue_number)
-            mark_subtask_done(subtask_id, res, f"Ran missing info check for #{issue_number}")
+        mark_subtask_started(subtask_id)
+        if task_type in ("duplicate_check", "missing_info_check") and issue_number:
+            # evaluate_issue() runs all 6 tools + synthesis for this issue and
+            # caches the result briefly -- a poll cycle enqueues both
+            # duplicate_check and missing_info_check for the same changed
+            # issue, so whichever is processed first does the real work
+            # (including missing_info_check's Gemini call) and the other
+            # reuses it instead of re-running everything from scratch.
+            full = evaluate_issue(repo, issue_number)
+            res = full["evidence"].get(task_type, {})
+            mark_subtask_done(subtask_id, res, f"Ran {task_type} for #{issue_number}")
             return res
 
         elif task_type == "health_trend_check":
@@ -107,13 +107,37 @@ def process_one_subtask(subtask: dict) -> dict:
             return {}
 
     except Exception as exc:
-        logger.exception("Subtask %s failed: %s", subtask_id, exc)
-        mark_subtask_failed(subtask_id, str(exc))
+        # .warning(), not .exception(): a full traceback per failed subtask
+        # is exactly the noise a screen-shared /monitor/status is supposed
+        # to be free of. The real error text is still in the message and in
+        # subtasks.log for anyone who needs to dig in.
+        logger.warning("[processor] subtask %s (%s) failed: %s", subtask_id, task_type, exc)
+        try:
+            mark_subtask_failed(subtask_id, str(exc))
+        except Exception:
+            # DB itself is the thing failing (disk full, locked, etc.) --
+            # nothing more we can do here, but this must not propagate: the
+            # caller's per-item loop needs to move on to the next subtask.
+            logger.warning("[processor] subtask %s: also failed to record the failure", subtask_id)
         return {"error": str(exc)}
 
 
 def process_pending_subtasks(repo: str | None = None, limit: int = 10) -> int:
-    pending = get_pending_subtasks(repo, limit=limit)
+    try:
+        pending = get_pending_subtasks(repo, limit=limit)
+    except Exception as exc:
+        logger.warning("[processor] failed to fetch pending subtasks: %s", exc)
+        return 0
+
+    processed = 0
     for st in pending:
-        process_one_subtask(st)
-    return len(pending)
+        try:
+            process_one_subtask(st)
+        except Exception as exc:
+            # process_one_subtask already catches everything from its own
+            # work -- this is only reached if something outside that (e.g.
+            # a malformed subtask row) blows up. Log and keep draining the
+            # rest of the batch rather than losing it.
+            logger.warning("[processor] subtask %s crashed outside its own handler: %s", st.get("id"), exc)
+        processed += 1
+    return processed
