@@ -21,5 +21,8 @@ def test_contentious_regex():
     assert "breaking change" in matches
 
 def test_thresholds():
-    assert DUPLICATE_SIMILARITY_THRESHOLD == 0.80
+    # 0.75 is a calibrated value (see the comment above DUPLICATE_SIMILARITY_THRESHOLD
+    # in agent/tools.py), not an arbitrary default -- don't "fix" this back to 0.80
+    # without re-reading that rationale first.
+    assert DUPLICATE_SIMILARITY_THRESHOLD == 0.75
     assert REGRESSION_SIMILARITY_THRESHOLD == 0.85
