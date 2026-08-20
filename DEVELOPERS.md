@@ -242,3 +242,95 @@ blender --background --python scripts/generate_octocat_logo.py
 blender --background --python scripts/generate_branch_node.py
 blender --background --python scripts/generate_smooth_issue_orb.py
 ```
+
+### 📍 Milestone 10: Proportional 3D Scaling & Smooth Camera Navigation
+* **Proportional 3D Text & Label Scaling**:
+  * Switched all 3D HTML labels in `GitNode.jsx`, `GitTreeScene.jsx`, and `GitBranchGraph3D.jsx` to `<Html transform sprite distanceFactor={...}>`.
+  * Text and glassmorphism cards now scale **1:1 in true 3D perspective** alongside the 3D meshes when zooming in/out, eliminating oversized label bloat.
+* **Smooth Camera Controllers**:
+  * Added `SmoothCameraController` in `GitTreeScene.jsx` and `SmoothBranchCameraController` in `GitBranchGraph3D.jsx`.
+  * Selecting a node or commit smoothly lerps camera position and OrbitControls target (`controls.target.lerp()`) to focus on the selected element.
+  * Deselecting returns camera to the overview vantage point.
+* **Health Metrics Data Mapping**:
+  * Refined `HealthMetricsView.jsx` to map SQLite `health_snapshots` timestamps, SLA response drift, duplicate rate %, and 30-day contributor activity.
+
+### 📍 Milestone 11: Z-Index Isolation, OrbitControls Fix & Scalable Tree LOD
+* **Strict Z-Index Layering (No HUD Overlaps)**:
+  * Upgraded `TopNav.jsx` and `IssueDetailPanel.jsx` to `z-50`, `MonitorPanel.jsx` to `z-40`.
+  * Configured `zIndexRange={[1, 10]}` on all Three.js `<Html>` elements in `GitNode.jsx`, `GitTreeScene.jsx`, and `GitBranchGraph3D.jsx`.
+  * 3D nodes and floating labels now strictly render **behind** all HUD headers, sidebars, and drawers.
+* **OrbitControls Responsiveness**:
+  * Fixed camera lerp conflict: smooth camera animation now runs solely during selection events and immediately yields full, smooth control to `OrbitControls` on drag/zoom (`onStart` / `onEnd`).
+* **Scalable Tree LOD & Category Filter Chips**:
+  * Added floating interactive category filter chips in `GitTreeScene.jsx`: `All`, `Security & Urgent`, `Regressions`, `Contentious`, `Duplicates`, `Needs Info`.
+  * Intelligently caps visible 3D cluster nodes to the top prioritized/escalated issues (max 35 visible), rendering large repositories (>500 issues) buttery-smooth at 60 FPS.
+
+### 📍 Milestone 12: Minimalist Command Center UI & De-Cluttering
+* **Ultra-Clean Header (`TopNav.jsx`)**:
+  * Unified brand, active repo, borderless segment navigation pills, and compact action cluster into a single ultra-thin glassmorphism header.
+* **Collapsible Telemetry Micro-Pill (`MonitorPanel.jsx`)**:
+  * Replaced the bulky top-left floating card with a sleek, non-intrusive pill (`🟢 Agent Loop • 3 queued`). Clicking it opens a slide-over terminal sheet only when needed.
+* **Streamlined Filter Micro-Ribbon (`GitTreeScene.jsx`)**:
+  * Replaced heavy floating filter cards with a minimalist translucent pill bar with colored status dots.
+* **Cardless Issue Detail Drawer (`IssueDetailPanel.jsx`)**:
+  * Removed "cards-inside-cards" box clutter. Used clean typography, subtle hairline dividers, direct metric highlights, and a clean one-click feedback bar.
+* **Removed Redundant Floating Bars (`App.jsx`)**:
+  * Removed duplicate bottom switcher bar, maximizing vertical viewport space for the 3D scene.
+
+### 📍 Milestone 13: Colorful Breathing Nebula & Dynamic Sliding Filter Ribbon
+* **Vibrant Breathing Cosmic Nebula (`NebulaBackground.jsx`)**:
+  * Implemented multi-layered cosmic nebula clouds and 1,400+ stardust particles based on the user's reference palette (Golden amber `#f7d08a`, Jade `#38a388`, Deep Teal `#1b999c`, Midnight Indigo `#28235c`, Cosmic Violet `#591a4f`).
+  * Removed `<gridHelper>` linish floor grid from both 3D scenes in favor of luminous cosmic clouds.
+  * Added subtle breathing pulsation (`sin(time * 0.4)`) with sinusoidal hue and volumetric gas drift.
+* **Dynamic Sliding Filter Ribbon (`DynamicFilterRibbon.jsx`)**:
+  * Positioned at the top-right of the 3D canvas (`top-18 right-4`).
+  * Implemented dynamic pill-shaped sliding segmented controller with smooth icon and shape transitions.
+  * Dynamically changes the cosmic background and lighting color theme based on the active filter (All, Security, Regressions, Contentious, Duplicates, Needs Info).
+* **Smooth Swooshing Telemetry Pill (`MonitorPanel.jsx`)**:
+  * Fluid expansion/collapse animation between the ultra-compact status pill and the slide-over terminal sheet.
+
+### 📍 Milestone 14: Photorealistic FBM Nebula Shader & Centered Telemetry Matrix Table
+* **Photorealistic 5-Octave FBM Nebula Shader (`NebulaBackground.jsx`)**:
+  * Replaced low-poly mesh spheres with a custom GLSL raymarched sky dome shader with 5-octave Fractional Brownian Motion, Simplex noise ionization filaments, 4-point lens flare diffraction stars, and organic volumetric gas swirls.
+  * Faithfully matches the user's reference photo color palette (Teal `#1b999c`, Jade `#38a388`, Golden Stardust `#f7d08a`, Violet `#591a4f`, Midnight Indigo `#1c183e`).
+  * Dynamic theme transitions smoothly shift shader uniform color vectors on filter changes.
+* **Centered Subtask Execution Matrix Table (`MonitorPanel.jsx`)**:
+  * Clicking the top-left telemetry pill opens a full-width centered glassmorphism command table modal with smooth swoosh/zoom animation (`animate-in zoom-in-95`).
+  * Displays real-time subtask queues, scheduler metrics, status filters (`all`, `done`, `running`, `pending`), execution logs, and instant force-drain controls.
+
+### 📍 Milestone 15: De-Squished Flank Layout, Sliding Filter Slider & Auto-Centering Camera
+* **Spacious Flank Layout (No Top Squishing)**:
+  * Repositioned **Agent Loop** to `fixed top-20 left-6` and **Dynamic Filter Ribbon** to `fixed top-20 right-6`, providing generous breathing room below the top navigation bar.
+* **Glowing Pill Sliding Filter Ribbon (`DynamicFilterRibbon.jsx`)**:
+  * Implemented glowing active pill states with individual category colors, borders, and ambient light glows (Teal, Crimson, Magenta, Amber, Slate, Cyan).
+* **Smart Auto-Centering Camera Navigation (`GitTreeScene.jsx`)**:
+  * When a category filter is clicked (e.g. `Security`, `Regressions`, `Contentious`), the 3D scene isolates those nodes and the camera automatically glides (`controls.target.lerp()` & `camera.position.lerp()`) to center the new cluster directly in the middle of the viewport.
+  * Clicking `All Matrix` smoothly glides back to the overview center.
+
+### 📍 Milestone 16: Vertical Slider Filter Dock on Right Flank
+* **Vertical Triage Filter Slider (`DynamicFilterRibbon.jsx`)**:
+  * Transformed horizontal filter ribbon into a sleek vertical command slider anchored on the right flank (`fixed top-24 right-6`).
+  * Features high-contrast glowing neon active states, individual category icons with micro-interactions, category count pills, and dynamic ambient lighting shifts.
+
+### 📍 Milestone 17: Multi-Category Filter Matching Fix (Needs Info)
+* **Resolved Category Priority Shadowing**:
+  * Fixed an issue where issues with multiple categories (e.g. `#1673` with `["needs-more-info", "contentious"]`) were being absorbed into earlier `if-else` branches, leaving `clusterMap.needs_info` empty when filtered.
+  * Implemented `matchesCategory()` helper in `GitTreeScene.jsx` and updated filtering logic so that when any category filter is clicked, all issues containing that tag are populated and rendered.
+  * Verified that clicking `Needs Info` displays issue `#1673` centered in the 3D scene with its turquoise orb and proportional title badge.
+
+### 📍 Milestone 18: Otsuka-Air / Zeroz Minimalist Redesign, 3D Depth Occlusion & Responsive Architecture
+* **Minimalist High-Contrast Design Language**:
+  * Applied Japanese minimalist aesthetics inspired by Otsuka-Air and Zeroz across all HUD components:
+    * Frosted obsidian glass surfaces (`bg-black/50 backdrop-blur-3xl border border-white/10`).
+    * High-contrast typography (pure white `#ffffff` primary text, muted zinc `#71717a` secondary text).
+    * Replaced emojis with clean Lucide SVG icons across all buttons, navigation, and badges.
+* **Genuine WebGL 3D Billboard Tags with Depth Occlusion (`ClusterHeader3D.jsx`)**:
+  * Created native Three.js 3D Billboard mesh for cluster headers with `depthWrite: true` and `depthTest: true`.
+  * Nodes in front (`z > tag.z`) render naturally in front of tags, and nodes behind (`z < tag.z`) are occluded by the tag's frosted backing plane.
+* **Smart Semantic Summaries & Focused Zoom (`GitNode.jsx`)**:
+  * Replaced truncated title words with intelligent semantic summaries (`Security signal: RCE keyword detected`, `Duplicate: 90.7% similar to #1`, `Missing reproduction info`, etc.).
+  * When any node is clicked/selected, all other unselected node labels automatically fade out to keep the zoomed-in camera inspection clean and uncluttered.
+* **Dynamic Fluid Responsiveness Across All Viewports**:
+  * `TopNav.jsx`: Dynamic header with automatic view dropdown on mobile/tablet and truncated repo context.
+  * `DynamicFilterRibbon.jsx`: Collapsible vertical dock with smooth collapse/expand toggle on smaller viewports.
+  * `MonitorPanel.jsx` & `IssueDetailPanel.jsx`: Responsive modals and slide-up sheets with adaptive grids and horizontal scroll safety.

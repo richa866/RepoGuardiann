@@ -10,7 +10,7 @@ import { ListView2D } from './components/hud/ListView2D';
 import { HealthMetricsView } from './components/hud/HealthMetricsView';
 import { WeeklyBriefView } from './components/hud/WeeklyBriefView';
 import { ConnectRepoModal } from './components/hud/ConnectRepoModal';
-import { Layers, List, Activity, Sparkles, CheckCircle2, ShieldAlert, Zap } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import './App.css';
 
 export default function App() {
@@ -62,8 +62,8 @@ export default function App() {
       setAppStage('main');
       setActiveView('3d');
       setIsWarpTransitioning(false);
-      showToast('Agentic Triage Engaged: Escalation nodes mapped in 3D');
-    }, 700);
+      showToast('Agentic Triage Engaged: 3D escalation matrix loaded');
+    }, 600);
   };
 
   // Sync trigger
@@ -89,7 +89,7 @@ export default function App() {
     const { data, error } = await api.checkNow(health.active_repo);
     setIsChecking(false);
     if (!error) {
-      showToast(`Agent loop executed! Drained queue & updated escalations.`);
+      showToast(`Agent loop executed! Processed subtask queue.`);
       refreshData();
     }
   };
@@ -100,7 +100,7 @@ export default function App() {
   };
 
   const handleRepoConnected = (newRepo) => {
-    showToast(`Connected to ${newRepo}! Launching analysis...`);
+    showToast(`Connected to ${newRepo}!`);
     refreshData();
     setAppStage('branch_viz');
   };
@@ -146,7 +146,7 @@ export default function App() {
         <div className="fixed inset-0 z-50 bg-red-600/30 backdrop-blur-xl animate-fade-out pointer-events-none" />
       )}
 
-      {/* HUD Header Top Navigation */}
+      {/* Sleek Header Navigation */}
       <TopNav
         health={health}
         activeView={activeView}
@@ -183,7 +183,7 @@ export default function App() {
                 />
               }
             />
-            {/* Top-Left Monitor HUD (shown in 3D mode) */}
+            {/* Top-Left Telemetry Micro-Pill & Collapsible Sheet */}
             <MonitorPanel
               monitorStatus={monitorStatus}
               onTriggerCheck={handleCheckNow}
@@ -209,7 +209,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Right-Side Issue Detail & Explainability Panel */}
+      {/* Right-Side Streamlined Issue Detail Panel */}
       {selectedIssue && (
         <IssueDetailPanel
           issue={selectedIssue}
@@ -218,47 +218,10 @@ export default function App() {
         />
       )}
 
-      {/* Floating Bottom View Toggle */}
-      {activeView !== 'topology' && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 p-1 rounded-2xl glass-panel border border-white/10 shadow-2xl backdrop-blur-xl">
-          <button
-            onClick={() => setActiveView('topology')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono text-purple-300 hover:text-purple-100 hover:bg-purple-950/50 transition"
-          >
-            <Zap className="w-3.5 h-3.5 text-purple-400" />
-            <span>Git Branches</span>
-          </button>
-
-          <button
-            onClick={() => setActiveView('3d')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono transition ${
-              activeView === '3d'
-                ? 'bg-sky-500/25 text-sky-200 border border-sky-400/40 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>3D Triage Tree</span>
-          </button>
-
-          <button
-            onClick={() => setActiveView('list')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono transition ${
-              activeView === 'list'
-                ? 'bg-sky-500/25 text-sky-200 border border-sky-400/40 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <List className="w-3.5 h-3.5" />
-            <span>2D Triage</span>
-          </button>
-        </div>
-      )}
-
       {/* Toast Notification */}
       {toastMsg && (
-        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl glass-panel-glow border border-sky-500/40 text-xs font-mono text-sky-200 shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom duration-200">
-          <Sparkles className="w-4 h-4 text-sky-400" />
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-slate-900/90 border border-sky-500/40 text-xs font-mono text-sky-200 shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom duration-200 backdrop-blur-xl">
+          <Sparkles className="w-3.5 h-3.5 text-sky-400" />
           <span>{toastMsg}</span>
         </div>
       )}

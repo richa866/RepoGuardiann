@@ -20,8 +20,8 @@ export function WeeklyBriefView({ repo }) {
 
   if (loading) {
     return (
-      <div className="w-full h-full flex items-center justify-center text-sky-400 font-mono text-sm">
-        <Sparkles className="w-5 h-5 animate-pulse mr-2" />
+      <div className="w-full h-full flex items-center justify-center text-zinc-400 font-mono text-sm">
+        <Sparkles className="w-5 h-5 animate-pulse mr-2 text-white" />
         <span>Synthesizing Maintainer Weekly Brief...</span>
       </div>
     );
@@ -30,54 +30,56 @@ export function WeeklyBriefView({ repo }) {
   const stats = brief?.stats || {};
 
   return (
-    <div className="w-full h-full pt-20 pb-6 px-6 max-w-4xl mx-auto flex flex-col space-y-4 overflow-y-auto">
+    <div className="w-full h-full pt-20 sm:pt-24 pb-8 px-4 sm:px-6 max-w-4xl mx-auto flex flex-col space-y-4 overflow-y-auto">
       {/* Executive Summary Card */}
-      <div className="p-6 rounded-3xl glass-panel-glow border border-sky-500/30 space-y-4 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+      <div className="p-4 sm:p-6 rounded-3xl bg-black/60 border border-white/10 backdrop-blur-2xl space-y-4 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-white/[0.08] pb-4 flex-wrap gap-2">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-sky-500/20 border border-sky-400/40 text-sky-300">
+            <div className="p-2 rounded-xl bg-white/10 border border-white/15 text-white">
               <FileText className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-100">
-                Maintainer Weekly Executive Brief
+              <h2 className="text-sm sm:text-base font-bold text-white font-mono">
+                Maintainer Executive Brief
               </h2>
-              <p className="text-xs text-slate-400 font-mono">
+              <p className="text-xs text-zinc-400 font-mono">
                 Repository: {repo} • Generated: {new Date().toLocaleDateString()}
               </p>
             </div>
           </div>
 
-          <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-500/30">
+          <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-white/10 text-white border border-white/15">
             {brief?.method || 'AI-Synthesized'}
           </span>
         </div>
 
         {/* Narrative Paragraph */}
-        <div className="text-sm text-slate-200 leading-relaxed font-sans bg-slate-950/60 p-4 rounded-2xl border border-white/5">
+        <div className="text-xs sm:text-sm text-zinc-200 leading-relaxed font-sans bg-white/[0.02] p-4 rounded-2xl border border-white/5">
           {brief?.summary || 'No weekly summary generated yet for this repository.'}
         </div>
 
-        {/* Highlight Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-white/5 text-center">
-            <span className="text-[10px] text-slate-400 font-mono uppercase block">Active Backlog</span>
-            <span className="text-lg font-bold font-mono text-sky-300">{stats.open_issues || 0}</span>
+        {/* Key Metrics Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 pt-2">
+          <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-center">
+            <span className="text-[11px] text-zinc-400 font-mono block">New Issues</span>
+            <span className="text-lg font-bold font-mono text-white">{stats.new_issues_count || 0}</span>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-white/5 text-center">
-            <span className="text-[10px] text-slate-400 font-mono uppercase block">Total Escalated</span>
-            <span className="text-lg font-bold font-mono text-amber-300">{stats.escalated_issues || 0}</span>
+          <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-center">
+            <span className="text-[11px] text-zinc-400 font-mono block">Security / Urgent</span>
+            <span className="text-lg font-bold font-mono text-rose-400">{stats.security_urgent_count || 0}</span>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-white/5 text-center">
-            <span className="text-[10px] text-slate-400 font-mono uppercase block">Security Flagged</span>
-            <span className="text-lg font-bold font-mono text-red-300">{stats.security_sensitive || 0}</span>
+          <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-center">
+            <span className="text-[11px] text-zinc-400 font-mono block">Duplicates Handled</span>
+            <span className="text-lg font-bold font-mono text-zinc-300">{stats.duplicates_count || 0}</span>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-white/5 text-center">
-            <span className="text-[10px] text-slate-400 font-mono uppercase block">Likely Duplicates</span>
-            <span className="text-lg font-bold font-mono text-purple-300">{stats.likely_duplicates || 0}</span>
+          <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-center">
+            <span className="text-[11px] text-zinc-400 font-mono block">Backlog Delta</span>
+            <span className={`text-lg font-bold font-mono ${stats.backlog_delta > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              {stats.backlog_delta > 0 ? `+${stats.backlog_delta}` : stats.backlog_delta || 0}
+            </span>
           </div>
         </div>
       </div>
