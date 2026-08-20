@@ -187,6 +187,8 @@ export default function App() {
   };
 
   const escalatedCount = issues.filter((i) => i.latest_escalate).length;
+  const openIssuesCount = issues.filter((i) => (i.state === 'open' || !i.state) && !i.is_pr).length;
+  const openPrsCount = issues.filter((i) => i.state === 'open' && i.is_pr).length;
 
   // 1. Dynamic 3D Login Page
   if (appStage === 'login') {
@@ -251,6 +253,8 @@ export default function App() {
         isChecking={isChecking}
         onOpenConnect={() => setIsConnectOpen(true)}
         issuesCount={issues.length}
+        openIssuesCount={openIssuesCount}
+        openPrsCount={openPrsCount}
         escalatedCount={escalatedCount}
         currentUser={currentUser}
         onLogout={handleLogout}

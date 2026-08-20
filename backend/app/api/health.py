@@ -37,6 +37,8 @@ class HealthSnapshotModel(BaseModel):
     duplicate_rate_pct: Optional[float] = None
     open_count: int
     closed_count: int
+    open_prs_count: Optional[int] = 0
+    closed_prs_count: Optional[int] = 0
     active_contributors_30d: int
     new_contributors_30d: int
     data_source: str = "historical"  # "historical" | "live-computed"
@@ -52,7 +54,9 @@ class HealthResponse(BaseModel):
     chroma_connected: bool = True
     embedding_count: int = 0
     open_issues_count: int = 0
+    open_prs_count: int = 0
     closed_issues_count: int = 0
+    closed_prs_count: int = 0
     total_issues_count: int = 0
     pending_subtasks_count: int = 0
     data_source: str = "live-computed"  # "historical" | "live-computed"
@@ -75,18 +79,26 @@ class HealthMetricsResponse(BaseModel):
 # --- Helper: Live Snapshot Computation ---
 
 def compute_live_snapshot(repo: str) -> HealthSnapshotModel:
-    """Computes a live repository health snapshot from SQLite tables."""
+    """Compute real-time health metrics from SQLite when health_snapshots table is empty or thin."""
     conn = get_conn()
     cur = conn.cursor()
 
-    # Open / closed counts
-    cur.execute("SELECT count(*) FROM issues WHERE repo = ? AND state = 'open'", (repo,))
-    open_count = cur.fetchone()[0]
+    # Pure Issues vs Pull Requests counts
+    cur.execute("SELECT count(*) FROM issues WHERE repo = ? AND state = 'open' AND is_pr = 0", (repo,))
+    open_issues_count = cur.fetchone()[0]
 
-    cur.execute("SELECT count(*) FROM issues WHERE repo = ? AND state = 'closed'", (repo,))
-    closed_count = cur.fetchone()[0]
+    cur.execute("SELECT count(*) FROM issues WHERE repo = ? AND state = 'open' AND is_pr = 1", (repo,))
+    open_prs_count = cur.fetchone()[0]
 
-    backlog_size = open_count
+    cur.execute("SELECT count(*) FROM issues WHERE repo = ? AND state = 'closed' AND is_pr = 0", (repo,))
+    closed_issues_count = cur.fetchone()[0]
+
+    cur.execute("SELECT count(*) FROM issues WHERE repo = ? AND state = 'closed' AND is_pr = 1", (repo,))
+    closed_prs_count = cur.fetchone()[0]
+
+    open_count = open_issues_count
+    closed_count = closed_issues_count
+    backlog_size = open_issues_count
 
     # Response time estimate from comments (time between issue creation and first maintainer comment)
     cur.execute(
@@ -189,12 +201,18 @@ def get_health(repo: Optional[str] = None):
     except Exception:
         chroma_connected = False
 
-    # Issue counts
-    cur.execute("SELECT count(*) FROM issues WHERE repo = ? AND state = 'open'", (target,))
-    open_count = cur.fetchone()[0]
+    # Issue counts (Pure Issues vs PRs)
+    cur.execute("SELECT count(*) FROM issues WHERE repo = ? AND state = 'open' AND is_pr = 0", (target,))
+    open_issues_count = cur.fetchone()[0]
 
-    cur.execute("SELECT count(*) FROM issues WHERE repo = ? AND state = 'closed'", (target,))
-    closed_count = cur.fetchone()[0]
+    cur.execute("SELECT count(*) FROM issues WHERE repo = ? AND state = 'open' AND is_pr = 1", (target,))
+    open_prs_count = cur.fetchone()[0]
+
+    cur.execute("SELECT count(*) FROM issues WHERE repo = ? AND state = 'closed' AND is_pr = 0", (target,))
+    closed_issues_count = cur.fetchone()[0]
+
+    cur.execute("SELECT count(*) FROM issues WHERE repo = ? AND state = 'closed' AND is_pr = 1", (target,))
+    closed_prs_count = cur.fetchone()[0]
 
     cur.execute("SELECT count(*) FROM subtasks WHERE repo = ? AND status = 'pending'", (target,))
     pending_subtasks = cur.fetchone()[0]
@@ -235,9 +253,11 @@ def get_health(repo: Optional[str] = None):
         database_connected=db_connected,
         chroma_connected=chroma_connected,
         embedding_count=chroma_count,
-        open_issues_count=open_count,
-        closed_issues_count=closed_count,
-        total_issues_count=open_count + closed_count,
+        open_issues_count=open_issues_count,
+        open_prs_count=open_prs_count,
+        closed_issues_count=closed_issues_count,
+        closed_prs_count=closed_prs_count,
+        total_issues_count=open_issues_count + open_prs_count + closed_issues_count + closed_prs_count,
         pending_subtasks_count=pending_subtasks,
         data_source=data_source,
         current_snapshot=current_snapshot,

@@ -28,6 +28,8 @@ export function TopNav({
   onSwitchRepo,
   repos = [],
   issuesCount = 0,
+  openIssuesCount = 0,
+  openPrsCount = 0,
   escalatedCount = 0,
   currentUser = null,
   onLogout = null,
@@ -68,6 +70,8 @@ export function TopNav({
   const currentView = views.find(v => v.id === activeView) || views[0];
   const CurrentIcon = currentView.icon;
 
+  const displayOpenIssues = openIssuesCount || issuesCount;
+
   return (
     <header className="fixed top-2.5 sm:top-3.5 left-2 sm:left-4 md:left-6 right-2 sm:right-4 md:right-6 z-50 flex items-center justify-between gap-1.5 sm:gap-3 md:gap-4 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full bg-black/80 border border-white/10 shadow-2xl backdrop-blur-3xl transition-all max-w-[calc(100vw-1rem)] sm:max-w-[calc(100vw-2rem)] md:max-w-[calc(100vw-3rem)] mx-auto box-border">
       
@@ -85,14 +89,14 @@ export function TopNav({
             <button
               onClick={() => setRepoDropdownOpen(!repoDropdownOpen)}
               className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-white/[0.04] hover:bg-white/10 border border-white/10 hover:border-white/25 text-xs font-mono text-zinc-300 transition cursor-pointer shrink-0"
-              title="Click to switch active repository"
+              title={`Active: ${health?.active_repo || 'No repo'} (${displayOpenIssues} open issues, ${openPrsCount} open PRs)`}
             >
               <GitBranch className="w-3.5 h-3.5 text-sky-400 shrink-0" />
               <span className="font-medium text-white truncate max-w-[70px] xs:max-w-[95px] sm:max-w-[125px] md:max-w-[155px]">
                 {health?.active_repo || 'No repo'}
               </span>
               <span className="text-zinc-600 hidden lg:inline">•</span>
-              <span className="text-zinc-400 hidden lg:inline">{issuesCount}</span>
+              <span className="text-zinc-400 hidden lg:inline">{displayOpenIssues} open</span>
               {escalatedCount > 0 && (
                 <span className="text-white font-medium flex items-center gap-1 shrink-0 ml-0.5 hidden sm:inline-flex">
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
