@@ -19,7 +19,11 @@ import {
   Clock,
   FileQuestion,
   Users,
-  Flame
+  Flame,
+  Send,
+  Tag,
+  Lock,
+  Loader2
 } from 'lucide-react';
 import api from '../../api';
 
@@ -34,12 +38,23 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
   const [overrideReason, setOverrideReason] = useState('False Positive');
   const [customNote, setCustomNote] = useState('');
 
+  // 1-Click Action states
+  const [postingComment, setPostingComment] = useState(false);
+  const [commentPosted, setCommentPosted] = useState(false);
+  const [applyingLabels, setApplyingLabels] = useState(false);
+  const [labelsApplied, setLabelsApplied] = useState(false);
+  const [closingIssue, setClosingIssue] = useState(false);
+  const [issueClosed, setIssueClosed] = useState(false);
+
   useEffect(() => {
     if (!issue) return;
     let isMounted = true;
     setLoading(true);
     setFeedbackVote(feedbackMap[issue.number] || null);
     setShowOverrideModal(false);
+    setCommentPosted(false);
+    setLabelsApplied(false);
+    setIssueClosed(false);
 
     api.getIssue(issue.number, issue.repo).then(({ data }) => {
       if (isMounted) {
@@ -74,7 +89,6 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
     setFeedbackVote(vote);
     setShowOverrideModal(false);
 
-    // Optimistic UI response for instantaneous 100% consistency across all nodes
     if (onFeedbackSubmitted) {
       onFeedbackSubmitted(issue.number, vote);
     }
@@ -97,6 +111,40 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
     setTimeout(() => setCopiedDraft(false), 2000);
   }
 
+  async function handlePostComment() {
+    if (!draftedComment || postingComment) return;
+    setPostingComment(true);
+    const { error } = await api.postComment(issue.number, draftedComment, issue.repo);
+    setPostingComment(false);
+    if (!error) {
+      setCommentPosted(true);
+      setTimeout(() => setCommentPosted(false), 4000);
+    }
+  }
+
+  async function handleApplyLabels() {
+    if (categories.length === 0 || applyingLabels) return;
+    setApplyingLabels(true);
+    const { error } = await api.addLabels(issue.number, categories, issue.repo);
+    setApplyingLabels(false);
+    if (!error) {
+      setLabelsApplied(true);
+      setTimeout(() => setLabelsApplied(false), 4000);
+    }
+  }
+
+  async function handleCloseDuplicate(duplicateNum) {
+    if (closingIssue) return;
+    setClosingIssue(true);
+    const closeComment = `Closing as duplicate of #${duplicateNum}. Verified by RepoGuardian maintainer.`;
+    const { error } = await api.closeIssue(issue.number, 'not_planned', closeComment, issue.repo);
+    setClosingIssue(false);
+    if (!error) {
+      setIssueClosed(true);
+      if (onFeedbackSubmitted) onFeedbackSubmitted(issue.number, 'up');
+    }
+  }
+
   return (
     <aside className="fixed top-20 sm:top-24 right-3 sm:right-6 bottom-3 sm:bottom-6 z-50 w-[calc(100vw-1.5rem)] sm:w-[440px] max-w-lg rounded-3xl bg-black/95 border border-white/10 shadow-2xl backdrop-blur-3xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200 pointer-events-auto">
       {/* Header */}
@@ -104,9 +152,13 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
         <div className="flex items-center gap-2.5 min-w-0">
           <span className="text-xs font-mono font-bold text-white">#{issue.number}</span>
           <span className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded-full ${
-            issue.state === 'open' ? 'bg-white/10 text-white border border-white/15' : 'bg-zinc-800 text-zinc-400'
+            issueClosed || issue.state === 'closed' 
+              ? 'bg-purple-950/60 text-purple-300 border border-purple-500/30'
+              : issue.state === 'open' 
+              ? 'bg-white/10 text-white border border-white/15' 
+              : 'bg-zinc-800 text-zinc-400'
           }`}>
-            {issue.state}
+            {issueClosed ? 'closed' : issue.state}
           </span>
           <span className="text-xs text-zinc-400 font-mono truncate">by {issue.author}</span>
         </div>
@@ -159,7 +211,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
               Agentic Triage Verdict
             </span>
             
-            {/* Synthesis Mode Badge: Gemini 2.5 Flash vs Rule-Based Engine */}
+            {/* Synthesis Mode Badge */}
             {isGemini ? (
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1 shadow-sm">
                 <Sparkles className="w-3 h-3 text-purple-400" />
@@ -173,18 +225,39 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
             )}
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
-            {categories.length === 0 ? (
-              <span className="text-xs text-zinc-500 font-mono">No escalation signals detected</span>
-            ) : (
-              categories.map((cat) => (
-                <span
-                  key={cat}
-                  className="text-[10px] uppercase font-mono px-2.5 py-0.5 rounded-full font-semibold bg-white/10 text-white border border-white/15"
-                >
-                  {cat}
-                </span>
-              ))
+          {/* Categories Row with 1-Click Label Dispatch */}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex flex-wrap gap-1.5">
+              {categories.length === 0 ? (
+                <span className="text-xs text-zinc-500 font-mono">No escalation signals detected</span>
+              ) : (
+                categories.map((cat) => (
+                  <span
+                    key={cat}
+                    className="text-[10px] uppercase font-mono px-2.5 py-0.5 rounded-full font-semibold bg-white/10 text-white border border-white/15"
+                  >
+                    {cat}
+                  </span>
+                ))
+              )}
+            </div>
+
+            {categories.length > 0 && (
+              <button
+                onClick={handleApplyLabels}
+                disabled={applyingLabels || labelsApplied}
+                className="flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30 hover:bg-sky-500/25 transition cursor-pointer disabled:opacity-50"
+                title="Apply AI categories as GitHub issue labels"
+              >
+                {applyingLabels ? (
+                  <Loader2 className="w-3 h-3 animate-spin text-sky-400" />
+                ) : labelsApplied ? (
+                  <Check className="w-3 h-3 text-emerald-400" />
+                ) : (
+                  <Tag className="w-3 h-3 text-sky-400" />
+                )}
+                <span>{labelsApplied ? 'Labels Attached!' : 'Apply Labels'}</span>
+              </button>
             )}
           </div>
 
@@ -270,7 +343,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
           )}
         </div>
 
-        {/* Project-Aware RAG Matches */}
+        {/* Project-Aware RAG Matches with 1-Click Close Duplicate */}
         {similarIssues.length > 0 && (
           <>
             <div className="h-px bg-white/[0.06]" />
@@ -287,7 +360,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
                 {similarIssues.map((match) => (
                   <div
                     key={match.number}
-                    className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1"
+                    className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-semibold text-white truncate">
@@ -303,6 +376,24 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
                         Resolution: "{match.resolution}"
                       </p>
                     )}
+
+                    {/* 1-Click Close as Duplicate Action */}
+                    <div className="flex items-center justify-end pt-1">
+                      <button
+                        onClick={() => handleCloseDuplicate(match.number)}
+                        disabled={closingIssue || issueClosed}
+                        className="flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25 transition cursor-pointer disabled:opacity-50"
+                      >
+                        {closingIssue ? (
+                          <Loader2 className="w-3 h-3 animate-spin text-purple-400" />
+                        ) : issueClosed ? (
+                          <Check className="w-3 h-3 text-emerald-400" />
+                        ) : (
+                          <Lock className="w-3 h-3 text-purple-400" />
+                        )}
+                        <span>{issueClosed ? 'Closed as Duplicate' : `Close as Duplicate of #${match.number}`}</span>
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -310,24 +401,43 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
           </>
         )}
 
-        {/* Drafted Maintainer Follow-up Comment */}
+        {/* Drafted Maintainer Follow-up Comment with 1-Click GitHub Dispatch */}
         {draftedComment && (
           <>
             <div className="h-px bg-white/[0.06]" />
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-1.5">
                 <span className="text-[11px] font-semibold uppercase tracking-wider font-mono text-white flex items-center gap-1.5">
                   <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
                   Drafted Follow-up Comment
                 </span>
-                <button
-                  onClick={handleCopyDraft}
-                  className="flex items-center gap-1 text-[10px] font-mono text-white hover:text-zinc-200 px-2.5 py-0.5 rounded-full bg-white/10 border border-white/15 transition cursor-pointer"
-                >
-                  {copiedDraft ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedDraft ? 'Copied' : 'Copy'}</span>
-                </button>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleCopyDraft}
+                    className="flex items-center gap-1 text-[10px] font-mono text-white hover:text-zinc-200 px-2.5 py-0.5 rounded-full bg-white/10 border border-white/15 transition cursor-pointer"
+                  >
+                    {copiedDraft ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedDraft ? 'Copied' : 'Copy'}</span>
+                  </button>
+
+                  <button
+                    onClick={handlePostComment}
+                    disabled={postingComment || commentPosted}
+                    className="flex items-center gap-1 text-[10px] font-mono px-3 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition cursor-pointer font-bold disabled:opacity-50"
+                  >
+                    {postingComment ? (
+                      <Loader2 className="w-3 h-3 animate-spin text-emerald-400" />
+                    ) : commentPosted ? (
+                      <Check className="w-3 h-3 text-emerald-400" />
+                    ) : (
+                      <Send className="w-3 h-3 text-emerald-400" />
+                    )}
+                    <span>{commentPosted ? 'Posted to GitHub!' : 'Post to GitHub'}</span>
+                  </button>
+                </div>
               </div>
+
               <div className="text-zinc-300 font-mono text-xs bg-white/[0.03] p-3 rounded-2xl border border-white/[0.06] whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
                 {draftedComment}
               </div>

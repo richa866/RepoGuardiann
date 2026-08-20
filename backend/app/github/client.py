@@ -82,3 +82,25 @@ class GitHubClient:
     def get_rate_limit(self) -> dict:
         data, _ = self.get("/rate_limit")
         return data
+
+    def post_comment(self, repo: str, issue_number: int, body: str) -> dict:
+        url = f"{API_BASE}/repos/{repo}/issues/{issue_number}/comments"
+        resp = self.session.post(url, json={"body": body}, timeout=20)
+        self._update_rate_limits(resp)
+        resp.raise_for_status()
+        return resp.json()
+
+    def add_labels(self, repo: str, issue_number: int, labels: list[str]) -> list[dict]:
+        url = f"{API_BASE}/repos/{repo}/issues/{issue_number}/labels"
+        resp = self.session.post(url, json={"labels": labels}, timeout=20)
+        self._update_rate_limits(resp)
+        resp.raise_for_status()
+        return resp.json()
+
+    def close_issue(self, repo: str, issue_number: int, reason: str = "completed") -> dict:
+        url = f"{API_BASE}/repos/{repo}/issues/{issue_number}"
+        resp = self.session.patch(url, json={"state": "closed", "state_reason": reason}, timeout=20)
+        self._update_rate_limits(resp)
+        resp.raise_for_status()
+        return resp.json()
+

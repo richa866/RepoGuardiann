@@ -50,6 +50,9 @@ export const api = {
   monitorStatus: (repo) => call(client.get("/monitor/status", { params: repo ? { repo } : {} })),
   checkNow: (repo) => call(client.post("/monitor/check-now", null, { params: repo ? { repo } : {} })),
   brief: (repo) => call(client.get("/brief", { params: repo ? { repo } : {} })),
+  postComment: (number, body, repo) => call(client.post(`/issues/${number}/comment`, { body, repo })),
+  addLabels: (number, labels, repo) => call(client.post(`/issues/${number}/labels`, { labels, repo })),
+  closeIssue: (number, reason, comment, repo) => call(client.post(`/issues/${number}/close`, { reason, comment, repo })),
 };
 
 export default api;

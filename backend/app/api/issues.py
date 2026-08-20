@@ -107,3 +107,116 @@ def get_issue(number: int, repo: str | None = None):
         "subtasks": subtasks,
         "feedback": feedback,
     }
+
+
+class PostCommentIn(BaseModel):
+    body: str
+    repo: str | None = None
+
+
+class AddLabelsIn(BaseModel):
+    labels: list[str]
+    repo: str | None = None
+
+
+class CloseIssueIn(BaseModel):
+    reason: str = "completed"
+    comment: str | None = None
+    repo: str | None = None
+
+
+@router.post("/issues/{number}/comment")
+def post_comment_endpoint(number: int, body: PostCommentIn):
+    target = _require_active_repo(body.repo)
+    row = get_repo_row(target)
+    token = row["token"] if row else None
+
+    posted_on_github = False
+    gh_comment_id = None
+    if token:
+        try:
+            client = GitHubClient(token=token)
+            gh_res = client.post_comment(target, number, body.body)
+            posted_on_github = True
+            gh_comment_id = gh_res.get("id")
+        except Exception:
+            pass
+
+    with tx() as c:
+        cur = c.execute(
+            "INSERT INTO comments (repo, issue_number, author, body, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (target, number, "repoguardian-bot", body.body, now_iso(), now_iso()),
+        )
+        local_id = cur.lastrowid
+
+    return {
+        "status": "success",
+        "posted_on_github": posted_on_github,
+        "comment_id": gh_comment_id or local_id,
+        "repo": target,
+        "issue_number": number,
+        "body": body.body,
+        "created_at": now_iso(),
+    }
+
+
+@router.post("/issues/{number}/labels")
+def add_labels_endpoint(number: int, body: AddLabelsIn):
+    target = _require_active_repo(body.repo)
+    row = get_repo_row(target)
+    token = row["token"] if row else None
+
+    posted_on_github = False
+    if token:
+        try:
+            client = GitHubClient(token=token)
+            client.add_labels(target, number, body.labels)
+            posted_on_github = True
+        except Exception:
+            pass
+
+    conn = get_conn()
+    issue_row = conn.execute("SELECT labels FROM issues WHERE repo = ? AND number = ?", (target, number)).fetchone()
+    if issue_row:
+        current_labels = set(json.loads(issue_row["labels"] or "[]"))
+        current_labels.update(body.labels)
+        with tx() as c:
+            c.execute(
+                "UPDATE issues SET labels = ?, updated_at = ? WHERE repo = ? AND number = ?",
+                (json.dumps(list(current_labels)), now_iso(), target, number),
+            )
+
+    return {"status": "success", "posted_on_github": posted_on_github, "labels": body.labels}
+
+
+@router.post("/issues/{number}/close")
+def close_issue_endpoint(number: int, body: CloseIssueIn):
+    target = _require_active_repo(body.repo)
+    row = get_repo_row(target)
+    token = row["token"] if row else None
+
+    posted_on_github = False
+    if token:
+        try:
+            client = GitHubClient(token=token)
+            if body.comment:
+                client.post_comment(target, number, body.comment)
+            client.close_issue(target, number, body.reason)
+            posted_on_github = True
+        except Exception:
+            pass
+
+    with tx() as c:
+        if body.comment:
+            c.execute(
+                "INSERT INTO comments (repo, issue_number, author, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (target, number, "repoguardian-bot", body.comment, now_iso(), now_iso()),
+            )
+        c.execute(
+            "UPDATE issues SET state = 'closed', updated_at = ? WHERE repo = ? AND number = ?",
+            (now_iso(), target, number),
+        )
+
+    return {"status": "closed", "posted_on_github": posted_on_github, "issue_number": number}
+
