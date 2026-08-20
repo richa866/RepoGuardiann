@@ -7,7 +7,7 @@ from app.agent.tools import (
     missing_info_check,
     contentiousness_check,
 )
-from app.agent.tool_schemas import ANTHROPIC_TOOL_SCHEMAS
+from app.agent.tool_schemas import GEMINI_TOOL_SCHEMAS
 from app.agent.synthesis import evaluate_issue, run_all_tools
 
 __all__ = [
@@ -18,7 +18,7 @@ __all__ = [
     "staleness_check",
     "missing_info_check",
     "contentiousness_check",
-    "ANTHROPIC_TOOL_SCHEMAS",
+    "GEMINI_TOOL_SCHEMAS",
     "evaluate_issue",
     "run_all_tools",
 ]
