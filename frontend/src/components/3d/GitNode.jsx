@@ -95,6 +95,7 @@ export function GitNode({
   onSelect 
 }) {
   const groupRef = useRef();
+  const orbRef = useRef();
   const [hovered, setHovered] = useState(false);
   const isInRangeRef = useRef(true);
   const [isInRange, setIsInRange] = useState(true);
@@ -114,7 +115,6 @@ export function GitNode({
     categories.some((c) => typeof c === 'string' && c.toLowerCase().includes('info'));
   const isDuplicate = categories.includes('likely-duplicate');
   const isStale = categories.includes('stale/needs-triage');
-  const isEscalated = isSecurity || isUrgent || isContentious || isRegression;
 
   const isOtherSelected = Boolean(
     selectedIssue && (selectedIssue.number !== issue.number || selectedIssue.repo !== issue.repo)
@@ -213,11 +213,22 @@ export function GitNode({
       setIsInRange(inRange);
     }
 
-    const yOffset = Math.sin(t * 1.5 + position[0] * 0.4) * 0.15;
-    groupRef.current.position.y = position[1] + yOffset;
+    // Keep position rock-solid static in filtered view (no bobbing)
+    if (!isFiltered) {
+      const yOffset = Math.sin(t * 1.5 + position[0] * 0.4) * 0.12;
+      groupRef.current.position.y = position[1] + yOffset;
+    } else {
+      groupRef.current.position.set(position[0], position[1], position[2]);
+    }
 
-    groupRef.current.rotation.y += 0.01;
-    groupRef.current.rotation.x = Math.sin(t * 0.6) * 0.05;
+    // Spin ONLY the inner crystal orb, keeping groupRef and Html card completely static
+    if (orbRef.current) {
+      orbRef.current.rotation.y += 0.01;
+      orbRef.current.rotation.x = Math.sin(t * 0.6) * 0.05;
+
+      const targetScale = isSelected ? 1.35 : hovered ? 1.2 : 1.0;
+      orbRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
+    }
 
     if (pulseSpeed > 0) {
       const pulse = Math.sin(t * pulseSpeed) * 0.5 + 0.5;
@@ -232,9 +243,6 @@ export function GitNode({
         }
       });
     }
-
-    const targetScale = isSelected ? 1.35 : hovered ? 1.2 : 1.0;
-    groupRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
   });
 
   const categoryLabel = categories[0]
@@ -246,19 +254,43 @@ export function GitNode({
   const summaryText = getIssueSummary(issue);
   const descriptionText = issue?.title || 'No description provided';
 
-  // Alternating cardinal anchor offset to guarantee zero card overlap
+  // Radial outward label offset calculation to guarantee zero overlap and maximum separation
   const labelOffset = useMemo(() => {
-    if (isSelected || hovered) return [0, 1.85, 0];
-    
+    if (isSelected || hovered) return [0, 1.9, 0];
+
+    if (isFiltered) {
+      const [x, y] = position;
+      // Push outward away from center (0,0)
+      if (Math.abs(x) < 1.0 && y > 1.0) {
+        return [0, 2.1, 0]; // Top node
+      }
+      if (Math.abs(x) < 1.0 && y < -1.0) {
+        return [0, -2.1, 0]; // Bottom node
+      }
+      if (x < -1.0 && y < 0) {
+        return [-2.8, -0.6, 0]; // Bottom-left node
+      }
+      if (x > 1.0 && y < 0) {
+        return [2.8, -0.6, 0]; // Bottom-right node
+      }
+      if (x < -1.0 && y >= 0) {
+        return [-2.8, 0.6, 0]; // Top-left node
+      }
+      if (x > 1.0 && y >= 0) {
+        return [2.8, 0.6, 0]; // Top-right node
+      }
+    }
+
+    // Staggered slot in cluster overview
     const slot = nodeIndex % 4;
     switch (slot) {
-      case 0: return [0, 1.85, 0];     // Top
-      case 1: return [0, -1.85, 0];    // Bottom
-      case 2: return [2.2, 0.2, 0];    // Right
-      case 3: return [-2.2, 0.2, 0];   // Left
-      default: return [0, 1.85, 0];
+      case 0: return [0, 1.9, 0];      // Top
+      case 1: return [0, -1.9, 0];     // Bottom
+      case 2: return [2.4, 0.2, 0];    // Right
+      case 3: return [-2.4, 0.2, 0];   // Left
+      default: return [0, 1.9, 0];
     }
-  }, [nodeIndex, isSelected, hovered]);
+  }, [nodeIndex, isSelected, hovered, isFiltered, position]);
 
   // Level of Detail (LOD) Hierarchy:
   // - Full Expanded Card: Shown if selected, hovered, in filtered sub-type, or is the single closest node to camera
@@ -284,17 +316,20 @@ export function GitNode({
         document.body.style.cursor = 'auto';
       }}
     >
-      <primitive object={clonedScene} scale={0.75} />
+      {/* Rotating 3D Crystal Orb */}
+      <group ref={orbRef}>
+        <primitive object={clonedScene} scale={0.75} />
 
-      {/* Selected Minimalist Ring */}
-      {isSelected && (
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[1.25, 1.4, 32]} />
-          <meshBasicMaterial color="#ffffff" side={THREE.DoubleSide} transparent opacity={0.9} />
-        </mesh>
-      )}
+        {/* Selected Minimalist Ring */}
+        {isSelected && (
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[1.25, 1.4, 32]} />
+            <meshBasicMaterial color="#ffffff" side={THREE.DoubleSide} transparent opacity={0.9} />
+          </mesh>
+        )}
+      </group>
 
-      {/* 3D Transformed Billboard Label with Cardinal Offsets & Focus-Tiered Anti-Collision */}
+      {/* Static 3D Transformed Billboard Label with Radial Outward Offsets */}
       {showTag && (
         <Html
           transform

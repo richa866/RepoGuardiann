@@ -350,7 +350,7 @@ export function getConstellationFormation(count) {
   }
 
   if (count === 3) {
-    const r = 6.2;
+    const r = 7.5;
     const p0 = [0, r, 0];
     const p1 = [-r * Math.sin(Math.PI / 3), -r * Math.cos(Math.PI / 3), 0.6];
     const p2 = [r * Math.sin(Math.PI / 3), -r * Math.cos(Math.PI / 3), -0.6];
@@ -361,8 +361,8 @@ export function getConstellationFormation(count) {
   }
 
   if (count === 4) {
-    const rx = 7.2;
-    const ry = 6.0;
+    const rx = 8.5;
+    const ry = 6.8;
     return {
       positions: [
         [0, ry, 0],
@@ -375,7 +375,7 @@ export function getConstellationFormation(count) {
   }
 
   if (count === 5) {
-    const r = 7.4;
+    const r = 8.6;
     const positions = [];
     for (let i = 0; i < 5; i++) {
       const angle = (i * 2 * Math.PI) / 5 - Math.PI / 2;
@@ -685,7 +685,7 @@ function SceneContent({
         const { positions, connections: shapeConns } = getConstellationFormation(visibleIssues.length);
 
         const minY = Math.min(...positions.map((p) => p[1]));
-        const tagPos = [0, minY - 3.5, 0];
+        const tagPos = [0, minY - 4.8, 0];
 
         activeClusters.push({
           ...clusterCfg,
