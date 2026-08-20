@@ -42,6 +42,13 @@ def _env(name: str, default: str | None = None) -> str | None:
     return val.strip() if isinstance(val, str) else val
 
 
+def _resolve_path(raw_path: str, base_dir: Path = REPO_ROOT) -> str:
+    p = Path(raw_path)
+    if not p.is_absolute():
+        p = (base_dir / p).resolve()
+    return str(p)
+
+
 @dataclass
 class Settings:
     github_token: str | None = field(default_factory=lambda: _env("GITHUB_TOKEN") or None)
@@ -59,8 +66,12 @@ class Settings:
     full_sync_max_items: int = field(
         default_factory=lambda: int(_env("FULL_SYNC_MAX_ITEMS", "500"))
     )
-    database_path: str = field(default_factory=lambda: _env("DB_PATH") or _env("DATABASE_PATH", "./data/repoguardian.db"))
-    chroma_path: str = field(default_factory=lambda: _env("CHROMA_PATH", "./data/chromadb"))
+    database_path: str = field(
+        default_factory=lambda: _resolve_path(_env("DB_PATH") or _env("DATABASE_PATH", "./data/repoguardian.db"))
+    )
+    chroma_path: str = field(
+        default_factory=lambda: _resolve_path(_env("CHROMA_PATH", "./data/chromadb"))
+    )
     log_level: str = field(default_factory=lambda: _env("LOG_LEVEL", "INFO"))
 
     @property
