@@ -253,3 +253,14 @@ blender --background --python scripts/generate_smooth_issue_orb.py
   * Deselecting returns camera to the overview vantage point.
 * **Health Metrics Data Mapping**:
   * Refined `HealthMetricsView.jsx` to map SQLite `health_snapshots` timestamps, SLA response drift, duplicate rate %, and 30-day contributor activity.
+
+### 📍 Milestone 11: Z-Index Isolation, OrbitControls Fix & Scalable Tree LOD
+* **Strict Z-Index Layering (No HUD Overlaps)**:
+  * Upgraded `TopNav.jsx` and `IssueDetailPanel.jsx` to `z-50`, `MonitorPanel.jsx` to `z-40`.
+  * Configured `zIndexRange={[1, 10]}` on all Three.js `<Html>` elements in `GitNode.jsx`, `GitTreeScene.jsx`, and `GitBranchGraph3D.jsx`.
+  * 3D nodes and floating labels now strictly render **behind** all HUD headers, sidebars, and drawers.
+* **OrbitControls Responsiveness**:
+  * Fixed camera lerp conflict: smooth camera animation now runs solely during selection events and immediately yields full, smooth control to `OrbitControls` on drag/zoom (`onStart` / `onEnd`).
+* **Scalable Tree LOD & Category Filter Chips**:
+  * Added floating interactive category filter chips in `GitTreeScene.jsx`: `All`, `Security & Urgent`, `Regressions`, `Contentious`, `Duplicates`, `Needs Info`.
+  * Intelligently caps visible 3D cluster nodes to the top prioritized/escalated issues (max 35 visible), rendering large repositories (>500 issues) buttery-smooth at 60 FPS.

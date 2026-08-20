@@ -30,6 +30,7 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
   const isDuplicate = categories.includes('likely-duplicate');
   const isStale = categories.includes('stale/needs-triage');
   const isNeedsInfo = categories.includes('needs-more-info');
+  const isEscalated = Boolean(issue?.latest_escalate || isSecurity || isUrgent || isRegression || isContentious);
 
   const { color, glowColor, baseIntensity, pulseSpeed, opacity } = useMemo(() => {
     if (isSecurity) {
@@ -178,16 +179,19 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
         </mesh>
       )}
 
-      {/* Proportional 3D Transformed Billboard Label (scales 1:1 with 3D space) */}
+      {/* Proportional 3D Transformed Billboard Label with zIndexRange to stay behind HUD */}
       <Html
         transform
         sprite
         position={[0, 1.65, 0]}
         distanceFactor={11}
+        zIndexRange={[1, 10]}
         className="pointer-events-none select-none"
       >
         <div
-          className={`flex flex-col gap-1 p-2 rounded-2xl font-mono backdrop-blur-2xl border shadow-2xl transition-all w-52 ${
+          className={`flex flex-col gap-1 p-2 rounded-2xl font-mono backdrop-blur-2xl border shadow-2xl transition-all ${
+            isEscalated || hovered || isSelected ? 'w-52' : 'w-24 text-center'
+          } ${
             isSelected
               ? 'bg-slate-950/95 text-white border-sky-400 scale-105 shadow-[0_0_25px_rgba(56,189,248,0.5)]'
               : hovered
@@ -205,31 +209,35 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
               <span className="text-white font-mono text-xs font-bold">#{issue?.number}</span>
             </div>
 
-            <span
-              className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-md ${
-                isSecurity
-                  ? 'bg-red-950 text-red-200 border border-red-500/60'
-                  : isContentious
-                  ? 'bg-amber-950 text-amber-200 border border-amber-500/60'
-                  : isRegression
-                  ? 'bg-purple-950 text-purple-200 border border-purple-500/60'
-                  : isUrgent
-                  ? 'bg-orange-950 text-orange-200 border border-orange-500/60'
-                  : isNeedsInfo
-                  ? 'bg-cyan-950 text-cyan-200 border border-cyan-500/60'
-                  : isDuplicate
-                  ? 'bg-slate-800 text-slate-300 border border-slate-600'
-                  : 'bg-emerald-950 text-emerald-200 border border-emerald-500/60'
-              }`}
-            >
-              {categoryLabel}
-            </span>
+            {(isEscalated || hovered || isSelected) && (
+              <span
+                className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-md ${
+                  isSecurity
+                    ? 'bg-red-950 text-red-200 border border-red-500/60'
+                    : isContentious
+                    ? 'bg-amber-950 text-amber-200 border border-amber-500/60'
+                    : isRegression
+                    ? 'bg-purple-950 text-purple-200 border border-purple-500/60'
+                    : isUrgent
+                    ? 'bg-orange-950 text-orange-200 border border-orange-500/60'
+                    : isNeedsInfo
+                    ? 'bg-cyan-950 text-cyan-200 border border-cyan-500/60'
+                    : isDuplicate
+                    ? 'bg-slate-800 text-slate-300 border border-slate-600'
+                    : 'bg-emerald-950 text-emerald-200 border border-emerald-500/60'
+                }`}
+              >
+                {categoryLabel}
+              </span>
+            )}
           </div>
 
-          {/* Issue Title Preview */}
-          <div className="text-[11px] text-slate-300 font-sans font-medium truncate leading-tight">
-            {issue?.title}
-          </div>
+          {/* Issue Title Preview (shown for escalated, hovered, or selected nodes) */}
+          {(isEscalated || hovered || isSelected) && (
+            <div className="text-[11px] text-slate-300 font-sans font-medium truncate leading-tight">
+              {issue?.title}
+            </div>
+          )}
         </div>
       </Html>
     </group>

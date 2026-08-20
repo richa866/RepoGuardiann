@@ -79,9 +79,9 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted }) {
   }
 
   return (
-    <aside className="fixed top-20 right-3 bottom-3 z-30 w-96 rounded-2xl glass-panel-glow border border-sky-500/20 shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+    <aside className="fixed top-20 right-3 bottom-3 z-50 w-96 rounded-2xl glass-panel-glow border border-sky-500/20 shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-950/60">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-950/80">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs font-mono font-bold text-sky-400">#{issue.number}</span>
           <span className={`text-[10px] uppercase font-mono px-1.5 py-0.5 rounded ${
@@ -255,7 +255,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted }) {
       </div>
 
       {/* Human-in-the-Loop Feedback Footer */}
-      <div className="p-3 border-t border-white/10 bg-slate-950/80 space-y-2">
+      <div className="p-3 border-t border-white/10 bg-slate-950/90 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider font-mono">
             Maintainer Feedback & Override

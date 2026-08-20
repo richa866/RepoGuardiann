@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect, Suspense, Component } from 'react';
+import React, { useMemo, useRef, useState, useEffect, Suspense, Component } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -8,8 +8,10 @@ import {
   Flame, 
   Copy, 
   HelpCircle, 
-  CheckCircle2,
+  CheckCircle2, 
   AlertTriangle,
+  Filter,
+  Layers
 } from 'lucide-react';
 
 class ErrorBoundary3D extends Component {
@@ -43,7 +45,7 @@ class ErrorBoundary3D extends Component {
 const CLUSTERS = {
   security_urgent: {
     id: 'security_urgent',
-    name: 'Critical Security & Urgent Hub',
+    name: 'Security & Urgent Hub',
     color: '#ef4444',
     icon: ShieldAlert,
     center: [0, 9.5, 0],
@@ -57,59 +59,76 @@ const CLUSTERS = {
   },
   contentious: {
     id: 'contentious',
-    name: 'Contentious Proposals & Pushback',
+    name: 'Contentious Proposals',
     color: '#f59e0b',
     icon: Flame,
     center: [14.5, 3.5, 4.5],
   },
   duplicates: {
     id: 'duplicates',
-    name: 'Semantic Duplicates & Stale Backlog',
+    name: 'Semantic Duplicates',
     color: '#64748b',
     icon: Copy,
     center: [12.5, -8.5, -4.5],
   },
   needs_info: {
     id: 'needs_info',
-    name: 'Missing Reproduction & Environment Info',
+    name: 'Missing Information',
     color: '#06b6d4',
     icon: HelpCircle,
     center: [-12.5, -8.5, 4.5],
   },
   normal: {
     id: 'normal',
-    name: 'Standard Triaged Backlog',
+    name: 'Standard Backlog',
     color: '#10b981',
     icon: CheckCircle2,
     center: [0, -3.0, 0],
   },
 };
 
-// Smooth Camera Controller that glides when selecting an issue node
-function SmoothCameraController({ selectedPosition, controlsRef }) {
+// Camera Controller that only animates during selection transitions, yielding full control to OrbitControls
+function SmoothCameraController({ selectedPosition, isUserInteracting, controlsRef }) {
   const { camera } = useThree();
   const targetLookAt = useRef(new THREE.Vector3(0, 0, 0));
   const targetCamPos = useRef(new THREE.Vector3(0, 4, 34));
+  const animating = useRef(false);
+  const animationFrames = useRef(0);
 
   useEffect(() => {
     if (selectedPosition) {
       targetLookAt.current.set(selectedPosition[0], selectedPosition[1], selectedPosition[2]);
       targetCamPos.current.set(
         selectedPosition[0],
-        selectedPosition[1] + 1.2,
-        selectedPosition[2] + 9.5
+        selectedPosition[1] + 1.0,
+        selectedPosition[2] + 9.0
       );
+      animating.current = true;
+      animationFrames.current = 45;
     } else {
       targetLookAt.current.set(0, 0, 0);
       targetCamPos.current.set(0, 4, 34);
+      animating.current = true;
+      animationFrames.current = 45;
     }
   }, [selectedPosition]);
 
   useFrame(() => {
-    if (controlsRef.current) {
-      controlsRef.current.target.lerp(targetLookAt.current, 0.06);
+    if (isUserInteracting.current) {
+      animating.current = false;
+      return;
     }
-    camera.position.lerp(targetCamPos.current, 0.06);
+
+    if (animating.current && animationFrames.current > 0) {
+      if (controlsRef.current) {
+        controlsRef.current.target.lerp(targetLookAt.current, 0.08);
+      }
+      camera.position.lerp(targetCamPos.current, 0.08);
+      animationFrames.current--;
+      if (animationFrames.current <= 0) {
+        animating.current = false;
+      }
+    }
   });
 
   return null;
@@ -142,8 +161,15 @@ function ClusterConnectors({ connections = [] }) {
   );
 }
 
-function SceneContent({ issues = [], selectedIssue, onSelectIssue, controlsRef }) {
-  // Group issues into spacious category-based clusters
+function SceneContent({ 
+  issues = [], 
+  selectedIssue, 
+  onSelectIssue, 
+  controlsRef, 
+  isUserInteracting,
+  activeFilter = 'all' 
+}) {
+  // Group and intelligently cap issues per cluster for high performance and clean tree visualization
   const { nodeData, clusterList, connections, selectedPos } = useMemo(() => {
     const clusterMap = {
       security_urgent: [],
@@ -176,19 +202,30 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue, controlsRef }
     const activeClusters = [];
     let selPos = null;
 
-    Object.entries(clusterMap).forEach(([clusterKey, clusterIssues]) => {
+    Object.entries(clusterMap).forEach(([clusterKey, allClusterIssues]) => {
+      // Filter out if user selected a specific category filter
+      if (activeFilter !== 'all' && activeFilter !== clusterKey) {
+        return;
+      }
+
       const clusterCfg = CLUSTERS[clusterKey];
-      if (clusterIssues.length > 0) {
+      const totalCount = allClusterIssues.length;
+
+      if (totalCount > 0) {
+        // Cap visible nodes per cluster to keep 3D tree responsive and readable (e.g. max 6-8 per cluster)
+        const visibleIssues = allClusterIssues.slice(0, 7);
+
         activeClusters.push({
           ...clusterCfg,
-          count: clusterIssues.length,
+          totalCount,
+          visibleCount: visibleIssues.length,
         });
 
         // Spacious radial distribution around cluster center
         const cCenter = clusterCfg.center;
-        clusterIssues.forEach((issue, idx) => {
-          const count = clusterIssues.length;
-          const radius = count > 1 ? 3.2 + (idx * 1.2) : 0.0;
+        visibleIssues.forEach((issue, idx) => {
+          const count = visibleIssues.length;
+          const radius = count > 1 ? 3.2 + (idx * 1.1) : 0.0;
           const angle = (idx / Math.max(1, count)) * Math.PI * 2 + 0.35;
 
           const pos = [
@@ -225,7 +262,7 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue, controlsRef }
     });
 
     return { nodeData: nodes, clusterList: activeClusters, connections: conns, selectedPos: selPos };
-  }, [issues, selectedIssue]);
+  }, [issues, selectedIssue, activeFilter]);
 
   return (
     <>
@@ -238,8 +275,12 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue, controlsRef }
       <Stars radius={90} depth={60} count={3500} factor={4} saturation={0.6} fade speed={1} />
       <gridHelper args={[160, 80, '#1e293b', '#0b1329']} position={[0, -12, 0]} />
 
-      {/* Smooth Camera Controller */}
-      <SmoothCameraController selectedPosition={selectedPos} controlsRef={controlsRef} />
+      {/* Camera Controller */}
+      <SmoothCameraController
+        selectedPosition={selectedPos}
+        isUserInteracting={isUserInteracting}
+        controlsRef={controlsRef}
+      />
 
       {/* Cluster Connecting Tubes */}
       <ClusterConnectors connections={connections} />
@@ -267,6 +308,7 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue, controlsRef }
             sprite
             position={[c.center[0], c.center[1] + 2.8, c.center[2]]}
             distanceFactor={14}
+            zIndexRange={[1, 10]}
             className="pointer-events-none select-none"
           >
             <div
@@ -281,7 +323,7 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue, controlsRef }
               <Icon className="w-4 h-4" />
               <span>{c.name}</span>
               <span className="px-2 py-0.5 rounded-full bg-white/10 text-slate-200 text-[10px]">
-                {c.count} {c.count === 1 ? 'issue' : 'issues'}
+                {c.totalCount} {c.totalCount === 1 ? 'issue' : 'issues'}
               </span>
             </div>
           </Html>
@@ -291,12 +333,18 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue, controlsRef }
       <OrbitControls
         ref={controlsRef}
         enableDamping
-        dampingFactor={0.06}
-        rotateSpeed={0.5}
-        zoomSpeed={0.8}
-        panSpeed={0.6}
+        dampingFactor={0.08}
+        rotateSpeed={0.6}
+        zoomSpeed={0.9}
+        panSpeed={0.7}
         minDistance={4}
         maxDistance={80}
+        onStart={() => {
+          isUserInteracting.current = true;
+        }}
+        onEnd={() => {
+          isUserInteracting.current = false;
+        }}
       />
     </>
   );
@@ -304,9 +352,86 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue, controlsRef }
 
 export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallback }) {
   const controlsRef = useRef();
+  const isUserInteracting = useRef(false);
+  const [activeFilter, setActiveFilter] = useState('all');
 
   return (
     <div className="w-full h-full relative select-none">
+      {/* Floating Category Filter Pills on Top of 3D Scene */}
+      <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 p-1 rounded-2xl glass-panel border border-white/10 shadow-2xl backdrop-blur-xl pointer-events-auto">
+        <button
+          onClick={() => setActiveFilter('all')}
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-mono transition ${
+            activeFilter === 'all'
+              ? 'bg-sky-500/25 text-sky-200 border border-sky-400/40 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Layers className="w-3 h-3 text-sky-400" />
+          <span>All ({issues.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveFilter('security_urgent')}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono transition ${
+            activeFilter === 'security_urgent'
+              ? 'bg-red-950/90 text-red-300 border border-red-500/50 shadow-sm'
+              : 'text-slate-400 hover:text-red-300'
+          }`}
+        >
+          <ShieldAlert className="w-3 h-3 text-red-400" />
+          <span>Security & Urgent</span>
+        </button>
+
+        <button
+          onClick={() => setActiveFilter('regression')}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono transition ${
+            activeFilter === 'regression'
+              ? 'bg-purple-950/90 text-purple-300 border border-purple-500/50 shadow-sm'
+              : 'text-slate-400 hover:text-purple-300'
+          }`}
+        >
+          <AlertTriangle className="w-3 h-3 text-purple-400" />
+          <span>Regressions</span>
+        </button>
+
+        <button
+          onClick={() => setActiveFilter('contentious')}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono transition ${
+            activeFilter === 'contentious'
+              ? 'bg-amber-950/90 text-amber-300 border border-amber-500/50 shadow-sm'
+              : 'text-slate-400 hover:text-amber-300'
+          }`}
+        >
+          <Flame className="w-3 h-3 text-amber-400" />
+          <span>Contentious</span>
+        </button>
+
+        <button
+          onClick={() => setActiveFilter('duplicates')}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono transition ${
+            activeFilter === 'duplicates'
+              ? 'bg-slate-800 text-slate-200 border border-slate-600 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Copy className="w-3 h-3 text-slate-400" />
+          <span>Duplicates</span>
+        </button>
+
+        <button
+          onClick={() => setActiveFilter('needs_info')}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono transition ${
+            activeFilter === 'needs_info'
+              ? 'bg-cyan-950/90 text-cyan-300 border border-cyan-500/50 shadow-sm'
+              : 'text-slate-400 hover:text-cyan-300'
+          }`}
+        >
+          <HelpCircle className="w-3 h-3 text-cyan-400" />
+          <span>Needs Info</span>
+        </button>
+      </div>
+
       <ErrorBoundary3D fallback={fallback}>
         <Suspense
           fallback={
@@ -329,6 +454,8 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
               selectedIssue={selectedIssue}
               onSelectIssue={onSelectIssue}
               controlsRef={controlsRef}
+              isUserInteracting={isUserInteracting}
+              activeFilter={activeFilter}
             />
           </Canvas>
         </Suspense>

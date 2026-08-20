@@ -20,7 +20,7 @@ export function MonitorPanel({ monitorStatus, onTriggerCheck, isChecking }) {
   const pendingCount = monitorStatus?.pending_subtasks || 0;
 
   return (
-    <aside className="fixed top-20 left-3 z-20 w-80 rounded-2xl glass-panel border border-white/10 shadow-2xl backdrop-blur-xl transition-all duration-300">
+    <aside className="fixed top-20 left-3 z-40 w-80 rounded-2xl glass-panel border border-white/10 shadow-2xl backdrop-blur-2xl transition-all duration-300">
       {/* Header */}
       <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-white/5">
         <div className="flex items-center gap-2">

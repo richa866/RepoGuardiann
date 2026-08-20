@@ -97,10 +97,12 @@ const TREE_DATA = {
 };
 
 // Smooth Camera Controller for Git Tree
-function SmoothBranchCameraController({ selectedCommit, selectedBranch, controlsRef }) {
+function SmoothBranchCameraController({ selectedCommit, selectedBranch, isUserInteracting, controlsRef }) {
   const { camera } = useThree();
   const targetLookAt = useRef(new THREE.Vector3(0, 0, 0));
   const targetCamPos = useRef(new THREE.Vector3(0, 2, 22));
+  const animating = useRef(false);
+  const animationFrames = useRef(0);
 
   useEffect(() => {
     if (selectedCommit && selectedBranch) {
@@ -110,17 +112,32 @@ function SmoothBranchCameraController({ selectedCommit, selectedBranch, controls
         selectedBranch.y + 0.8,
         selectedBranch.z + 8.5
       );
+      animating.current = true;
+      animationFrames.current = 45;
     } else {
       targetLookAt.current.set(0, 0, 0);
       targetCamPos.current.set(0, 2, 22);
+      animating.current = true;
+      animationFrames.current = 45;
     }
   }, [selectedCommit, selectedBranch]);
 
   useFrame(() => {
-    if (controlsRef.current) {
-      controlsRef.current.target.lerp(targetLookAt.current, 0.06);
+    if (isUserInteracting.current) {
+      animating.current = false;
+      return;
     }
-    camera.position.lerp(targetCamPos.current, 0.06);
+
+    if (animating.current && animationFrames.current > 0) {
+      if (controlsRef.current) {
+        controlsRef.current.target.lerp(targetLookAt.current, 0.08);
+      }
+      camera.position.lerp(targetCamPos.current, 0.08);
+      animationFrames.current--;
+      if (animationFrames.current <= 0) {
+        animating.current = false;
+      }
+    }
   });
 
   return null;
@@ -193,6 +210,7 @@ function CrystalCommitNode({ commit, branch, isSelected, onSelect }) {
         sprite
         position={[0, 1.4, 0]}
         distanceFactor={10}
+        zIndexRange={[1, 10]}
         className="pointer-events-none select-none"
       >
         <div
@@ -290,6 +308,7 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
   const [selectedCommit, setSelectedCommit] = useState(null);
   const [selectedBranch, setSelectedBranch] = useState(null);
   const controlsRef = useRef();
+  const isUserInteracting = useRef(false);
 
   const branches = TREE_DATA.branches;
 
@@ -316,6 +335,7 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
         <SmoothBranchCameraController
           selectedCommit={selectedCommit}
           selectedBranch={selectedBranch}
+          isUserInteracting={isUserInteracting}
           controlsRef={controlsRef}
         />
 
@@ -346,6 +366,7 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
             sprite
             position={[b.commits[0].x - 2.8, b.y, b.z]}
             distanceFactor={12}
+            zIndexRange={[1, 10]}
             className="pointer-events-none select-none"
           >
             <div
@@ -365,12 +386,18 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
         <OrbitControls
           ref={controlsRef}
           enableDamping
-          dampingFactor={0.06}
-          rotateSpeed={0.5}
-          zoomSpeed={0.8}
-          panSpeed={0.6}
+          dampingFactor={0.08}
+          rotateSpeed={0.6}
+          zoomSpeed={0.9}
+          panSpeed={0.7}
           minDistance={4}
           maxDistance={50}
+          onStart={() => {
+            isUserInteracting.current = true;
+          }}
+          onEnd={() => {
+            isUserInteracting.current = false;
+          }}
         />
       </Canvas>
 
