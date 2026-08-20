@@ -12,7 +12,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app.api.feedback import router as feedback_router
 from app.api.health import router as health_router
+from app.api.health_trends import router as health_trends_router
 from app.api.issues import router as issues_router
 from app.api.monitor import router as monitor_router
 from app.config import settings
@@ -29,9 +31,10 @@ async def lifespan(app: FastAPI):
     os.makedirs(settings.chroma_path, exist_ok=True)
     init_db()
 
+    # Start background scheduler for monitor polling
     start_scheduler()
 
-    # Optional auto-connect repository from .env on boot
+    # Auto-connect configured target repository on boot if needed
     if settings.github_repo and not get_active_repo():
         def _bootstrap():
             try:
@@ -53,22 +56,29 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Enable CORS for frontend local development (Vite on http://localhost:5173)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "*",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Mount modular API routers. POST /issues/{number}/feedback lives in
-# issues_router alongside the other /issues routes -- it used to ALSO be
-# defined in a separate feedback_router mounted after this one, which meant
-# FastAPI silently served the issues_router copy and the other file was dead
-# code. That shadowed copy was the one that set escalations.human_override
-# and validated the vote value, so both silently stopped happening.
+# Mount modular API routers. POST /issues/{number}/feedback is owned by
+# feedback_router ONLY -- it was previously also defined in issues_router,
+# and because FastAPI serves whichever matching route is registered first,
+# one copy silently shadowed the other. Keep it defined in exactly one place.
 app.include_router(health_router)
+app.include_router(health_trends_router)
 app.include_router(issues_router)
+app.include_router(feedback_router)
 app.include_router(monitor_router)
 
 

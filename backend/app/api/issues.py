@@ -1,4 +1,4 @@
-"""Issues API router: GET /issues, GET /issues/{number}, POST /issues/{number}/feedback.
+"""Issues API router: GET /issues, GET /issues/{number}, feedback lives in app/api/feedback.py.
 Implements exact CONTRACTS.md REST specifications with Pydantic response validation.
 """
 from __future__ import annotations
@@ -8,7 +8,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.db.database import get_active_repo, get_conn, now_iso, tx
+from app.db.database import get_active_repo, get_conn
 
 router = APIRouter(tags=["issues"])
 
@@ -106,17 +106,7 @@ class IssueDetailResponse(BaseModel):
     similar_issues: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class FeedbackCreateRequest(BaseModel):
-    repo: Optional[str] = None
-    escalation_id: Optional[int] = None
-    vote: str  # "up" | "down"
-    note: Optional[str] = None
 
-
-class FeedbackCreateResponse(BaseModel):
-    status: str = "ok"
-    feedback_id: int
-    message: str = "Feedback successfully recorded"
 
 
 # --- Helpers ---
@@ -386,52 +376,8 @@ def get_issue_detail(number: int, repo: Optional[str] = None):
     )
 
 
-@router.post("/issues/{number}/feedback", response_model=FeedbackCreateResponse)
-def create_issue_feedback(number: int, payload: FeedbackCreateRequest):
-    """POST /issues/{number}/feedback
-    Records human-in-the-loop maintainer feedback, and stamps the referenced
-    escalation as confirmed/dismissed so the verdict itself carries the
-    human decision -- not just a separate feedback row nobody joins to.
-    """
-    if payload.vote not in ("up", "down"):
-        raise HTTPException(status_code=400, detail="vote must be 'up' or 'down'")
-
-    target = _require_active_repo(payload.repo)
-    conn = get_conn()
-
-    # Validate issue exists
-    exists = conn.execute(
-        "SELECT 1 FROM issues WHERE repo = ? AND number = ?", (target, number)
-    ).fetchone()
-    if not exists:
-        raise HTTPException(status_code=404, detail=f"Issue #{number} not found in {target}")
-
-    with tx() as c:
-        cur = c.execute(
-            """
-            INSERT INTO feedback (repo, issue_number, escalation_id, vote, note, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                target,
-                number,
-                payload.escalation_id,
-                payload.vote,
-                payload.note or "",
-                now_iso(),
-            ),
-        )
-        feedback_id = cur.lastrowid
-
-        if payload.escalation_id is not None:
-            override = "confirmed" if payload.vote == "up" else "dismissed"
-            c.execute(
-                "UPDATE escalations SET human_override = ? WHERE id = ? AND repo = ?",
-                (override, payload.escalation_id, target),
-            )
-
-    return FeedbackCreateResponse(
-        status="ok",
-        feedback_id=feedback_id,
-        message="Feedback successfully recorded",
-    )
+# POST /issues/{number}/feedback deliberately does NOT live here -- it's in
+# app/api/feedback.py, which owns the richer implementation (auto
+# escalation_id lookup, structured override reasons, human_override
+# stamping). Defining it in both files is what caused the earlier bug where
+# FastAPI silently served whichever router was mounted first.
