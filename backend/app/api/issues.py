@@ -159,7 +159,7 @@ def list_issues(
 
     # Base query with LEFT JOIN on the latest escalation row
     query = """
-        SELECT 
+        SELECT
             i.repo,
             i.number,
             i.title,
@@ -219,7 +219,7 @@ def list_issues(
 
     # Query all matching for category post-filtering / count
     all_rows = [dict(r) for r in conn.execute(query, params).fetchall()]
-    
+
     # Process rows
     processed_items: list[IssueListItem] = []
     for r in all_rows:

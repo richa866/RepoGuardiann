@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { GuardianLogo3D } from '../3d/GuardianLogo3D';
 import { 
   GitBranch, 
@@ -8,10 +8,8 @@ import {
   List, 
   Activity, 
   FileText, 
-  ExternalLink,
-  PlusCircle,
-  ShieldAlert,
-  Cpu
+  Plus,
+  ChevronDown
 } from 'lucide-react';
 
 export function TopNav({
@@ -26,144 +24,138 @@ export function TopNav({
   issuesCount = 0,
   escalatedCount = 0,
 }) {
-  const isGemini = health?.gemini_configured;
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const views = [
+    { id: '3d', label: '3D Triage', icon: Layers },
+    { id: 'topology', label: 'Git Branches', icon: Zap },
+    { id: 'list', label: '2D Table', icon: List },
+    { id: 'health', label: 'Health', icon: Activity },
+    { id: 'brief', label: 'Weekly Brief', icon: FileText },
+  ];
+
+  const currentView = views.find(v => v.id === activeView) || views[0];
+  const CurrentIcon = currentView.icon;
 
   return (
-    <header className="fixed top-3 left-3 right-3 z-30 flex items-center justify-between px-4 py-2.5 rounded-2xl glass-panel border border-white/10 shadow-2xl backdrop-blur-xl">
-      {/* Brand & 3D Logo */}
-      <div className="flex items-center gap-3">
-        <GuardianLogo3D className="w-9 h-9 cursor-pointer" />
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-base font-bold tracking-tight bg-gradient-to-r from-sky-400 via-teal-300 to-indigo-400 bg-clip-text text-transparent">
-              RepoGuardian
-            </h1>
-            <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-500/30">
-              Agentic Triage
+    <header className="fixed top-3 sm:top-4 left-3 sm:left-6 right-3 sm:right-6 z-50 flex items-center justify-between px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-full bg-black/50 border border-white/10 shadow-2xl backdrop-blur-3xl transition-all">
+      {/* Brand & Repository Context */}
+      <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+        <GuardianLogo3D className="w-6 h-6 sm:w-7 sm:h-7 shrink-0 cursor-pointer" />
+        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+          <span className="text-xs sm:text-sm font-semibold tracking-tight text-white font-sans shrink-0">
+            RepoGuardian
+          </span>
+          <span className="text-zinc-600 font-mono text-xs hidden xs:inline">/</span>
+          <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-0.5 sm:py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11px] sm:text-xs font-mono text-zinc-300 min-w-0">
+            <GitBranch className="w-3 h-3 text-zinc-400 shrink-0" />
+            <span className="font-medium text-white truncate max-w-[90px] sm:max-w-[180px]">
+              {health?.active_repo || 'No repo'}
             </span>
-          </div>
-          <p className="text-[11px] text-slate-400 font-mono flex items-center gap-1.5">
-            <GitBranch className="w-3 h-3 text-sky-400" />
-            <span className="text-slate-200 font-medium">{health?.active_repo || 'No repo connected'}</span>
-            <span className="text-slate-500">|</span>
-            <span>{issuesCount} issues</span>
+            <span className="text-zinc-600 hidden sm:inline">•</span>
+            <span className="text-zinc-400 hidden sm:inline">{issuesCount}</span>
             {escalatedCount > 0 && (
-              <>
-                <span className="text-slate-500">|</span>
-                <span className="text-red-400 font-semibold">{escalatedCount} escalated</span>
-              </>
+              <span className="text-white font-medium flex items-center gap-1 shrink-0 ml-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                <span className="text-zinc-300 hidden md:inline">{escalatedCount} escalated</span>
+                <span className="text-zinc-300 md:hidden">{escalatedCount}</span>
+              </span>
             )}
-          </p>
+          </div>
         </div>
       </div>
 
-      {/* View Switcher Pills */}
-      <nav className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-white/5">
-        <button
-          onClick={() => onSelectView('topology')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-            activeView === 'topology'
-              ? 'bg-purple-500/25 text-purple-300 border border-purple-400/40 shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-          title="View clean Git Branch Topology"
-        >
-          <GitBranch className="w-3.5 h-3.5" />
-          <span>Git Branches</span>
-        </button>
-
-        <button
-          onClick={() => onSelectView('3d')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-            activeView === '3d'
-              ? 'bg-sky-500/20 text-sky-300 border border-sky-400/40 shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          <span>3D Triage Tree</span>
-        </button>
-
-        <button
-          onClick={() => onSelectView('list')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-            activeView === 'list'
-              ? 'bg-sky-500/20 text-sky-300 border border-sky-400/40 shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-        >
-          <List className="w-3.5 h-3.5" />
-          <span>2D Triage</span>
-        </button>
-
-        <button
-          onClick={() => onSelectView('health')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-            activeView === 'health'
-              ? 'bg-sky-500/20 text-sky-300 border border-sky-400/40 shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-        >
-          <Activity className="w-3.5 h-3.5" />
-          <span>Health Trends</span>
-        </button>
-
-        <button
-          onClick={() => onSelectView('brief')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-            activeView === 'brief'
-              ? 'bg-sky-500/20 text-sky-300 border border-sky-400/40 shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-        >
-          <FileText className="w-3.5 h-3.5" />
-          <span>Weekly Brief</span>
-        </button>
+      {/* Center View Switcher (Desktop Full Segments) */}
+      <nav className="hidden lg:flex items-center gap-1 p-1 rounded-full bg-white/[0.03] border border-white/10">
+        {views.map((v) => {
+          const Icon = v.icon;
+          const isActive = activeView === v.id;
+          return (
+            <button
+              key={v.id}
+              onClick={() => onSelectView(v.id)}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono transition-all duration-200 ${
+                isActive
+                  ? 'bg-white text-black font-semibold shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{v.label}</span>
+            </button>
+          );
+        })}
       </nav>
 
-      {/* Right Controls & Actions */}
-      <div className="flex items-center gap-2.5">
-        {/* AI Engine Badge */}
-        <div
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono border ${
-            isGemini
-              ? 'bg-emerald-950/70 text-emerald-300 border-emerald-500/40'
-              : 'bg-amber-950/70 text-amber-300 border-amber-500/40'
-          }`}
-          title={isGemini ? 'Gemini LLM Active' : 'Deterministic Rule-Based Synthesis Active'}
-        >
-          <Cpu className="w-3.5 h-3.5" />
-          <span>{isGemini ? 'Gemini 1.5' : 'Rule-Engine'}</span>
-        </div>
-
-        {/* Check Now Button */}
+      {/* Center View Switcher (Tablet / Mobile Dropdown) */}
+      <div className="lg:hidden relative">
         <button
-          onClick={onCheckNow}
-          disabled={isChecking}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30 transition shadow-sm active:scale-95 disabled:opacity-50"
-          title="Trigger agent polling & subtask queue processing immediately"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-xs font-mono text-white"
         >
-          <Zap className={`w-3.5 h-3.5 ${isChecking ? 'animate-pulse text-amber-400' : 'text-indigo-400'}`} />
-          <span>{isChecking ? 'Checking...' : 'Check Now'}</span>
+          <CurrentIcon className="w-3 h-3 text-sky-400" />
+          <span className="font-semibold">{currentView.label}</span>
+          <ChevronDown className="w-3 h-3 text-zinc-400" />
         </button>
 
-        {/* Sync Button */}
+        {mobileMenuOpen && (
+          <div className="absolute top-10 left-1/2 -translate-x-1/2 w-44 rounded-2xl bg-black/90 border border-white/15 shadow-2xl backdrop-blur-2xl p-1.5 flex flex-col gap-1 z-50 animate-in fade-in zoom-in-95 duration-150">
+            {views.map((v) => {
+              const Icon = v.icon;
+              const isActive = activeView === v.id;
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => {
+                    onSelectView(v.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono text-left transition ${
+                    isActive
+                      ? 'bg-white text-black font-bold'
+                      : 'text-zinc-300 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>{v.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Right Actions Cluster */}
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {/* Sync Action */}
         <button
           onClick={onSync}
           disabled={isSyncing}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 border border-sky-500/30 transition shadow-sm active:scale-95 disabled:opacity-50"
+          className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-mono text-zinc-300 hover:text-white bg-white/[0.04] hover:bg-white/10 border border-white/10 transition"
+          title="Poll GitHub for updates"
         >
-          <RotateCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-sky-400' : 'text-sky-400'}`} />
-          <span>{isSyncing ? 'Syncing...' : 'Sync Repo'}</span>
+          <RotateCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-white' : 'text-zinc-400'}`} />
+          <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : 'Sync'}</span>
         </button>
 
-        {/* Connect Repo Modal Trigger */}
+        {/* Check Now Trigger */}
+        <button
+          onClick={onCheckNow}
+          disabled={isChecking}
+          className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-mono text-white bg-white/10 hover:bg-white/20 border border-white/20 transition shadow-sm"
+          title="Trigger agentic investigation"
+        >
+          <Zap className={`w-3.5 h-3.5 ${isChecking ? 'animate-bounce text-white' : 'text-zinc-300'}`} />
+          <span className="hidden sm:inline">{isChecking ? 'Running...' : 'Check Now'}</span>
+        </button>
+
+        {/* Connect Repo Action */}
         <button
           onClick={onOpenConnect}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 transition active:scale-95"
+          className="flex items-center gap-1 px-3 sm:px-4 py-1.5 rounded-full text-xs font-mono font-bold text-black bg-white hover:bg-zinc-200 transition shadow-md"
         >
-          <PlusCircle className="w-3.5 h-3.5 text-slate-400" />
-          <span>Switch Repo</span>
+          <Plus className="w-3.5 h-3.5" />
+          <span className="hidden xs:inline">Connect</span>
         </button>
       </div>
     </header>

@@ -140,13 +140,15 @@ def get_monitor_status(repo: str | None = None) -> dict:
             "FROM subtasks WHERE repo = ? ORDER BY id DESC LIMIT 20", (active_repo,)
         ).fetchall()]
         recent_log = [dict(r) for r in conn.execute(
-            "SELECT * FROM monitor_log WHERE repo = ? ORDER BY id DESC LIMIT 15", (active_repo,)
+            "SELECT * FROM monitor_log WHERE repo = ? OR repo IS NULL ORDER BY id DESC LIMIT 15", (active_repo,)
         ).fetchall()]
     else:
         pending_count = 0
         recent_monitor_runs = []
         recent_subtasks = []
-        recent_log = []
+        recent_log = [dict(r) for r in conn.execute(
+            "SELECT * FROM monitor_log ORDER BY id DESC LIMIT 15"
+        ).fetchall()]
 
     return {
         "scheduler_running": bool(_scheduler and _scheduler.running),
