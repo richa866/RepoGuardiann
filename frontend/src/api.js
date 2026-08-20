@@ -51,6 +51,7 @@ export const api = {
   healthTrendsSummary: (repo) => call(client.get("/api/health-trends/summary", { params: repo ? { repo } : {} })),
   healthTrendsBacklogDrift: (repo, days = 30) => call(client.get("/api/health-trends/backlog-drift", { params: { ...(repo ? { repo } : {}), ...(days ? { days } : {}) } })),
   healthTrendsCategoryBreakdown: (repo) => call(client.get("/api/health-trends/category-breakdown", { params: repo ? { repo } : {} })),
+  overrideStats: (repo) => call(client.get("/feedback/override-stats", { params: repo ? { repo } : {} })),
   monitorStatus: (repo) => call(client.get("/monitor/status", { params: repo ? { repo } : {} })),
   checkNow: (repo) => call(client.post("/monitor/check-now", null, { params: repo ? { repo } : {} })),
   brief: (repo) => call(client.get("/brief", { params: repo ? { repo } : {} })),
