@@ -3,16 +3,11 @@ import {
   Terminal, 
   RefreshCw, 
   X, 
-  Play, 
   CheckCircle2, 
   Clock, 
-  AlertCircle, 
-  ChevronRight,
-  Sparkles,
-  Activity,
-  Layers,
-  Zap,
-  Filter
+  Zap, 
+  Layers, 
+  Activity 
 } from 'lucide-react';
 
 export function MonitorPanel({ monitorStatus, onTriggerCheck, isChecking }) {
@@ -45,8 +40,8 @@ export function MonitorPanel({ monitorStatus, onTriggerCheck, isChecking }) {
 
   return (
     <>
-      {/* 1. Sleek Floating Telemetry Pill (Top-Left) */}
-      <div className="fixed top-18 left-4 z-40 flex items-center gap-1.5 p-1 rounded-full bg-slate-950/85 border border-white/10 shadow-2xl backdrop-blur-2xl">
+      {/* 1. Sleek Floating Telemetry Pill on Left Side with Generous Padding */}
+      <aside className="fixed top-20 left-6 z-40 flex items-center gap-1.5 p-1 rounded-full bg-slate-950/85 border border-white/10 shadow-2xl backdrop-blur-2xl pointer-events-auto">
         <button
           onClick={() => setIsOpen(true)}
           className="group flex items-center gap-2 px-3.5 py-1.5 rounded-full hover:bg-white/5 transition text-xs font-mono"
@@ -66,8 +61,8 @@ export function MonitorPanel({ monitorStatus, onTriggerCheck, isChecking }) {
             {pendingCount > 0 ? `${pendingCount} queued` : 'Active'}
           </span>
 
-          <span className="text-[10px] text-slate-500 uppercase px-1.5 py-0.2 rounded bg-white/5 border border-white/5 ml-1">
-            Expand Table ↗
+          <span className="text-[10px] text-slate-400 uppercase px-1.5 py-0.2 rounded bg-white/5 border border-white/5 ml-1">
+            Table ↗
           </span>
         </button>
 
@@ -79,7 +74,7 @@ export function MonitorPanel({ monitorStatus, onTriggerCheck, isChecking }) {
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin text-sky-400' : ''}`} />
         </button>
-      </div>
+      </aside>
 
       {/* 2. Full-Featured Centered Telemetry Matrix Table Modal */}
       {isOpen && (

@@ -297,3 +297,12 @@ blender --background --python scripts/generate_smooth_issue_orb.py
 * **Centered Subtask Execution Matrix Table (`MonitorPanel.jsx`)**:
   * Clicking the top-left telemetry pill opens a full-width centered glassmorphism command table modal with smooth swoosh/zoom animation (`animate-in zoom-in-95`).
   * Displays real-time subtask queues, scheduler metrics, status filters (`all`, `done`, `running`, `pending`), execution logs, and instant force-drain controls.
+
+### 📍 Milestone 15: De-Squished Flank Layout, Sliding Filter Slider & Auto-Centering Camera
+* **Spacious Flank Layout (No Top Squishing)**:
+  * Repositioned **Agent Loop** to `fixed top-20 left-6` and **Dynamic Filter Ribbon** to `fixed top-20 right-6`, providing generous breathing room below the top navigation bar.
+* **Glowing Pill Sliding Filter Ribbon (`DynamicFilterRibbon.jsx`)**:
+  * Implemented glowing active pill states with individual category colors, borders, and ambient light glows (Teal, Crimson, Magenta, Amber, Slate, Cyan).
+* **Smart Auto-Centering Camera Navigation (`GitTreeScene.jsx`)**:
+  * When a category filter is clicked (e.g. `Security`, `Regressions`, `Contentious`), the 3D scene isolates those nodes and the camera automatically glides (`controls.target.lerp()` & `camera.position.lerp()`) to center the new cluster directly in the middle of the viewport.
+  * Clicking `All Matrix` smoothly glides back to the overview center.

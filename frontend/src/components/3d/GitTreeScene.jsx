@@ -48,7 +48,7 @@ const CLUSTERS = {
     name: 'Security & Urgent Hub',
     color: '#ef4444',
     icon: ShieldAlert,
-    center: [0, 9.5, 0],
+    center: [0, 8.5, 0],
   },
   regression: {
     id: 'regression',
@@ -96,8 +96,8 @@ const THEME_BACKGROUNDS = {
   needs_info: '#020c0e',
 };
 
-// Camera Controller that only animates during selection transitions, yielding full control to OrbitControls
-function SmoothCameraController({ selectedPosition, isUserInteracting, controlsRef }) {
+// Camera Controller that smoothly pans to center the active cluster or selected node
+function SmoothCameraController({ selectedPosition, activeFilter, isUserInteracting, controlsRef }) {
   const { camera } = useThree();
   const targetLookAt = useRef(new THREE.Vector3(0, 0, 0));
   const targetCamPos = useRef(new THREE.Vector3(0, 4, 34));
@@ -106,6 +106,7 @@ function SmoothCameraController({ selectedPosition, isUserInteracting, controlsR
 
   useEffect(() => {
     if (selectedPosition) {
+      // 1. Focus on specific selected node
       targetLookAt.current.set(selectedPosition[0], selectedPosition[1], selectedPosition[2]);
       targetCamPos.current.set(
         selectedPosition[0],
@@ -114,13 +115,21 @@ function SmoothCameraController({ selectedPosition, isUserInteracting, controlsR
       );
       animating.current = true;
       animationFrames.current = 45;
+    } else if (activeFilter !== 'all' && CLUSTERS[activeFilter]) {
+      // 2. Pan and center the isolated cluster
+      const c = CLUSTERS[activeFilter].center;
+      targetLookAt.current.set(c[0], c[1], c[2]);
+      targetCamPos.current.set(c[0], c[1] + 0.8, c[2] + 18.0);
+      animating.current = true;
+      animationFrames.current = 45;
     } else {
+      // 3. Reset to overview
       targetLookAt.current.set(0, 0, 0);
       targetCamPos.current.set(0, 4, 34);
       animating.current = true;
       animationFrames.current = 45;
     }
-  }, [selectedPosition]);
+  }, [selectedPosition, activeFilter]);
 
   useFrame(() => {
     if (isUserInteracting.current) {
@@ -211,6 +220,7 @@ function SceneContent({
     let selPos = null;
 
     Object.entries(clusterMap).forEach(([clusterKey, allClusterIssues]) => {
+      // If a specific filter is active, only render that cluster!
       if (activeFilter !== 'all' && activeFilter !== clusterKey) {
         return;
       }
@@ -219,7 +229,7 @@ function SceneContent({
       const totalCount = allClusterIssues.length;
 
       if (totalCount > 0) {
-        const visibleIssues = allClusterIssues.slice(0, 7);
+        const visibleIssues = allClusterIssues.slice(0, 10);
 
         activeClusters.push({
           ...clusterCfg,
@@ -269,18 +279,18 @@ function SceneContent({
 
   return (
     <>
-      {/* Dynamic Cosmic Lighting */}
       <ambientLight intensity={1.1} />
       <directionalLight position={[15, 22, 15]} intensity={2.4} color="#e0f2fe" />
       <pointLight position={[-15, -15, -15]} intensity={1.8} color="#6366f1" />
       <pointLight position={[0, 12, 10]} intensity={2.0} color="#38bdf8" />
 
-      {/* Colorful Breathing Nebula Space Environment (No Grid!) */}
+      {/* Colorful Breathing Nebula Space Environment */}
       <NebulaBackground activeTheme={activeFilter} />
 
-      {/* Camera Controller */}
+      {/* Smooth Camera Controller */}
       <SmoothCameraController
         selectedPosition={selectedPos}
+        activeFilter={activeFilter}
         isUserInteracting={isUserInteracting}
         controlsRef={controlsRef}
       />
@@ -381,7 +391,7 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
 
   return (
     <div className="w-full h-full relative select-none">
-      {/* Dynamic Pill-Shaped Filter Ribbon (Top-Right) */}
+      {/* Dynamic Pill-Shaped Filter Ribbon on Top-Right */}
       <DynamicFilterRibbon
         activeFilter={activeFilter}
         onSelectFilter={setActiveFilter}
