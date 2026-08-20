@@ -12,7 +12,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from app.api.feedback import router as feedback_router
 from app.api.health import router as health_router
 from app.api.issues import router as issues_router
 from app.api.monitor import router as monitor_router
@@ -62,10 +61,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount modular API routers
+# Mount modular API routers. POST /issues/{number}/feedback lives in
+# issues_router alongside the other /issues routes -- it used to ALSO be
+# defined in a separate feedback_router mounted after this one, which meant
+# FastAPI silently served the issues_router copy and the other file was dead
+# code. That shadowed copy was the one that set escalations.human_override
+# and validated the vote value, so both silently stopped happening.
 app.include_router(health_router)
 app.include_router(issues_router)
-app.include_router(feedback_router)
 app.include_router(monitor_router)
 
 

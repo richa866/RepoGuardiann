@@ -8,7 +8,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.db.database import get_active_repo, get_conn, now_iso
+from app.db.database import get_active_repo, get_conn, now_iso, tx
 
 router = APIRouter(tags=["issues"])
 
@@ -389,8 +389,13 @@ def get_issue_detail(number: int, repo: Optional[str] = None):
 @router.post("/issues/{number}/feedback", response_model=FeedbackCreateResponse)
 def create_issue_feedback(number: int, payload: FeedbackCreateRequest):
     """POST /issues/{number}/feedback
-    Records human-in-the-loop maintainer feedback.
+    Records human-in-the-loop maintainer feedback, and stamps the referenced
+    escalation as confirmed/dismissed so the verdict itself carries the
+    human decision -- not just a separate feedback row nobody joins to.
     """
+    if payload.vote not in ("up", "down"):
+        raise HTTPException(status_code=400, detail="vote must be 'up' or 'down'")
+
     target = _require_active_repo(payload.repo)
     conn = get_conn()
 
@@ -401,23 +406,29 @@ def create_issue_feedback(number: int, payload: FeedbackCreateRequest):
     if not exists:
         raise HTTPException(status_code=404, detail=f"Issue #{number} not found in {target}")
 
-    cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO feedback (repo, issue_number, escalation_id, vote, note, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (
-            target,
-            number,
-            payload.escalation_id,
-            payload.vote,
-            payload.note or "",
-            now_iso(),
-        ),
-    )
-    conn.commit()
-    feedback_id = cur.lastrowid
+    with tx() as c:
+        cur = c.execute(
+            """
+            INSERT INTO feedback (repo, issue_number, escalation_id, vote, note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                target,
+                number,
+                payload.escalation_id,
+                payload.vote,
+                payload.note or "",
+                now_iso(),
+            ),
+        )
+        feedback_id = cur.lastrowid
+
+        if payload.escalation_id is not None:
+            override = "confirmed" if payload.vote == "up" else "dismissed"
+            c.execute(
+                "UPDATE escalations SET human_override = ? WHERE id = ? AND repo = ?",
+                (override, payload.escalation_id, target),
+            )
 
     return FeedbackCreateResponse(
         status="ok",

@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from app.agent.synthesis import evaluate_issue
+from app.agent.tools import repo_avg_response_hours
 from app.db.database import get_conn, log_monitor_event, now_iso, tx
 from app.monitor.queue import (
     get_pending_subtasks,
@@ -44,18 +45,41 @@ def _compute_health_snapshot(repo: str) -> dict:
             "SELECT DISTINCT author FROM comments WHERE repo = ? AND created_at >= ?", (repo, since_30d)
         ).fetchall() if r["author"]
     }
-    active_contributors = len(issue_authors | comment_authors)
+    recent_authors = issue_authors | comment_authors
+    active_contributors = len(recent_authors)
+
+    # "New" means genuinely first seen in this window -- anyone with any
+    # issue or comment before it doesn't count. (Was max(1, active // 3),
+    # a made-up ratio that also could never report zero.)
+    prior_authors = {
+        r["author"] for r in conn.execute(
+            "SELECT DISTINCT author FROM issues WHERE repo = ? AND created_at < ?", (repo, since_30d)
+        ).fetchall() if r["author"]
+    } | {
+        r["author"] for r in conn.execute(
+            "SELECT DISTINCT author FROM comments WHERE repo = ? AND created_at < ?", (repo, since_30d)
+        ).fetchall() if r["author"]
+    }
+    new_contributors = len(recent_authors - prior_authors)
+
+    # Real computed average (creation -> first non-author reply, across every
+    # issue in the repo that got one), not the hardcoded 14.5 placeholder that
+    # used to sit here and surface verbatim in GET /brief and /health-metrics
+    # as if it were measured. Same helper response_time_check already uses, so
+    # the number a maintainer reads in the brief matches the one the agent
+    # reasons with.
+    avg_response_hours = repo_avg_response_hours(repo)
 
     snapshot = {
         "repo": repo,
         "taken_at": now_iso(),
         "backlog_size": open_count,
-        "avg_response_time_hours": 14.5,
+        "avg_response_time_hours": round(avg_response_hours, 2),
         "duplicate_rate": round(duplicate_rate, 3),
         "open_count": open_count,
         "closed_count": closed_count,
         "active_contributors_30d": active_contributors,
-        "new_contributors_30d": max(1, active_contributors // 3),
+        "new_contributors_30d": new_contributors,
     }
 
     with tx() as c:
