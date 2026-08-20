@@ -10,7 +10,6 @@ import {
   HelpCircle, 
   CheckCircle2, 
   AlertTriangle,
-  Filter,
   Layers
 } from 'lucide-react';
 
@@ -203,7 +202,6 @@ function SceneContent({
     let selPos = null;
 
     Object.entries(clusterMap).forEach(([clusterKey, allClusterIssues]) => {
-      // Filter out if user selected a specific category filter
       if (activeFilter !== 'all' && activeFilter !== clusterKey) {
         return;
       }
@@ -212,7 +210,6 @@ function SceneContent({
       const totalCount = allClusterIssues.length;
 
       if (totalCount > 0) {
-        // Cap visible nodes per cluster to keep 3D tree responsive and readable (e.g. max 6-8 per cluster)
         const visibleIssues = allClusterIssues.slice(0, 7);
 
         activeClusters.push({
@@ -298,7 +295,7 @@ function SceneContent({
         ))}
       </group>
 
-      {/* Floating 3D Cluster Header Badges (Proportionally Scaled with transform & sprite) */}
+      {/* Floating 3D Cluster Header Badges */}
       {clusterList.map((c) => {
         const Icon = c.icon;
         return (
@@ -312,18 +309,17 @@ function SceneContent({
             className="pointer-events-none select-none"
           >
             <div
-              className="flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-mono font-bold backdrop-blur-2xl border shadow-2xl uppercase tracking-wider whitespace-nowrap"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono font-bold backdrop-blur-xl border shadow-xl uppercase tracking-wider whitespace-nowrap"
               style={{
-                backgroundColor: 'rgba(5, 8, 17, 0.92)',
+                backgroundColor: 'rgba(5, 8, 17, 0.88)',
                 borderColor: c.color,
                 color: c.color,
-                boxShadow: `0 0 25px ${c.color}40`,
               }}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className="w-3.5 h-3.5" />
               <span>{c.name}</span>
-              <span className="px-2 py-0.5 rounded-full bg-white/10 text-slate-200 text-[10px]">
-                {c.totalCount} {c.totalCount === 1 ? 'issue' : 'issues'}
+              <span className="px-1.5 py-0.2 rounded-full bg-white/10 text-slate-200 text-[10px]">
+                {c.totalCount}
               </span>
             </div>
           </Html>
@@ -357,77 +353,77 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
 
   return (
     <div className="w-full h-full relative select-none">
-      {/* Floating Category Filter Pills on Top of 3D Scene */}
-      <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 p-1 rounded-2xl glass-panel border border-white/10 shadow-2xl backdrop-blur-xl pointer-events-auto">
+      {/* Sleek Minimalist Micro-Filter Ribbon (Top-Center) */}
+      <div className="fixed top-18 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 p-1 rounded-full bg-slate-950/70 border border-white/10 shadow-xl backdrop-blur-xl pointer-events-auto">
         <button
           onClick={() => setActiveFilter('all')}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-mono transition ${
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono transition ${
             activeFilter === 'all'
-              ? 'bg-sky-500/25 text-sky-200 border border-sky-400/40 shadow-sm'
+              ? 'bg-sky-500/20 text-sky-300 font-semibold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Layers className="w-3 h-3 text-sky-400" />
+          <Layers className="w-3 h-3" />
           <span>All ({issues.length})</span>
         </button>
 
         <button
           onClick={() => setActiveFilter('security_urgent')}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono transition ${
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono transition ${
             activeFilter === 'security_urgent'
-              ? 'bg-red-950/90 text-red-300 border border-red-500/50 shadow-sm'
+              ? 'bg-red-950/80 text-red-300 font-semibold border border-red-500/40'
               : 'text-slate-400 hover:text-red-300'
           }`}
         >
-          <ShieldAlert className="w-3 h-3 text-red-400" />
+          <span className="w-2 h-2 rounded-full bg-red-500" />
           <span>Security & Urgent</span>
         </button>
 
         <button
           onClick={() => setActiveFilter('regression')}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono transition ${
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono transition ${
             activeFilter === 'regression'
-              ? 'bg-purple-950/90 text-purple-300 border border-purple-500/50 shadow-sm'
+              ? 'bg-purple-950/80 text-purple-300 font-semibold border border-purple-500/40'
               : 'text-slate-400 hover:text-purple-300'
           }`}
         >
-          <AlertTriangle className="w-3 h-3 text-purple-400" />
+          <span className="w-2 h-2 rounded-full bg-purple-500" />
           <span>Regressions</span>
         </button>
 
         <button
           onClick={() => setActiveFilter('contentious')}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono transition ${
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono transition ${
             activeFilter === 'contentious'
-              ? 'bg-amber-950/90 text-amber-300 border border-amber-500/50 shadow-sm'
+              ? 'bg-amber-950/80 text-amber-300 font-semibold border border-amber-500/40'
               : 'text-slate-400 hover:text-amber-300'
           }`}
         >
-          <Flame className="w-3 h-3 text-amber-400" />
+          <span className="w-2 h-2 rounded-full bg-amber-500" />
           <span>Contentious</span>
         </button>
 
         <button
           onClick={() => setActiveFilter('duplicates')}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono transition ${
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono transition ${
             activeFilter === 'duplicates'
-              ? 'bg-slate-800 text-slate-200 border border-slate-600 shadow-sm'
+              ? 'bg-slate-800 text-slate-200 font-semibold border border-slate-600'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Copy className="w-3 h-3 text-slate-400" />
+          <span className="w-2 h-2 rounded-full bg-slate-400" />
           <span>Duplicates</span>
         </button>
 
         <button
           onClick={() => setActiveFilter('needs_info')}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono transition ${
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono transition ${
             activeFilter === 'needs_info'
-              ? 'bg-cyan-950/90 text-cyan-300 border border-cyan-500/50 shadow-sm'
+              ? 'bg-cyan-950/80 text-cyan-300 font-semibold border border-cyan-500/40'
               : 'text-slate-400 hover:text-cyan-300'
           }`}
         >
-          <HelpCircle className="w-3 h-3 text-cyan-400" />
+          <span className="w-2 h-2 rounded-full bg-cyan-400" />
           <span>Needs Info</span>
         </button>
       </div>

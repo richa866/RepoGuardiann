@@ -264,3 +264,15 @@ blender --background --python scripts/generate_smooth_issue_orb.py
 * **Scalable Tree LOD & Category Filter Chips**:
   * Added floating interactive category filter chips in `GitTreeScene.jsx`: `All`, `Security & Urgent`, `Regressions`, `Contentious`, `Duplicates`, `Needs Info`.
   * Intelligently caps visible 3D cluster nodes to the top prioritized/escalated issues (max 35 visible), rendering large repositories (>500 issues) buttery-smooth at 60 FPS.
+
+### 📍 Milestone 12: Minimalist Command Center UI & De-Cluttering
+* **Ultra-Clean Header (`TopNav.jsx`)**:
+  * Unified brand, active repo, borderless segment navigation pills, and compact action cluster into a single ultra-thin glassmorphism header.
+* **Collapsible Telemetry Micro-Pill (`MonitorPanel.jsx`)**:
+  * Replaced the bulky top-left floating card with a sleek, non-intrusive pill (`🟢 Agent Loop • 3 queued`). Clicking it opens a slide-over terminal sheet only when needed.
+* **Streamlined Filter Micro-Ribbon (`GitTreeScene.jsx`)**:
+  * Replaced heavy floating filter cards with a minimalist translucent pill bar with colored status dots.
+* **Cardless Issue Detail Drawer (`IssueDetailPanel.jsx`)**:
+  * Removed "cards-inside-cards" box clutter. Used clean typography, subtle hairline dividers, direct metric highlights, and a clean one-click feedback bar.
+* **Removed Redundant Floating Bars (`App.jsx`)**:
+  * Removed duplicate bottom switcher bar, maximizing vertical viewport space for the 3D scene.
