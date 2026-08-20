@@ -13,6 +13,7 @@ from app.db.database import (
     get_meta,
     get_repo_row,
     log_monitor_event,
+    now_iso,
     start_monitor_run,
 )
 from app.github.fetch import run_sync
@@ -21,13 +22,21 @@ from app.monitor.processor import process_pending_subtasks
 logger = logging.getLogger("repoguardian.monitor.poller")
 
 _scheduler: BackgroundScheduler | None = None
+# Set at the end of every poll_cycle(), success or failure -- proof the loop
+# is actually iterating, not just that the scheduler thread is alive
+# (scheduler_running only tells you the thread exists, not that cycles are
+# still completing).
+_last_heartbeat: str | None = None
 
 
-def poll_cycle() -> None:
+def poll_cycle() -> dict:
+    """Returns what the cycle found -- POST /monitor/trigger returns this
+    directly so a demo presenter sees real counts, not a bare ack."""
+    global _last_heartbeat
     active_repo = get_active_repo()
     if not active_repo:
         logger.debug("[monitor] no active repo connected, skipping cycle")
-        return
+        return {"repo": None, "status": "skipped", "reason": "no active repo connected"}
 
     logger.info("[monitor] starting poll cycle for %s", active_repo)
     log_monitor_event("poll_tick", f"Background scheduler tick for {active_repo}", repo=active_repo)
@@ -42,25 +51,48 @@ def poll_cycle() -> None:
     # blank"). Gating on a token being present meant an active repo connected
     # without one would silently never actually poll.
     run_id = start_monitor_run(active_repo)
+    sync_status = "success"
+    new_issues = updated_issues = subtasks_created = 0
+    sync_error: str | None = None
     try:
         result = run_sync(active_repo, token=token, since=since, max_items=50)
         if result.get("status") == "error":
-            finish_monitor_run(run_id, status="failed", error=result.get("error"))
+            sync_status = "failed"
+            sync_error = result.get("error")
+            finish_monitor_run(run_id, status="failed", error=sync_error)
         else:
+            new_issues = result.get("new_issues", 0)
+            updated_issues = result.get("updated_issues", 0)
+            subtasks_created = result.get("subtasks_created", 0)
             finish_monitor_run(
                 run_id,
                 status="success",
-                new_issues=result.get("new_issues", 0),
-                updated_issues=result.get("updated_issues", 0),
-                subtasks_created=result.get("subtasks_created", 0),
+                new_issues=new_issues,
+                updated_issues=updated_issues,
+                subtasks_created=subtasks_created,
             )
     except Exception as exc:
         logger.warning("[monitor] poll sync failed: %s", exc)
-        finish_monitor_run(run_id, status="failed", error=str(exc))
+        sync_status = "failed"
+        sync_error = str(exc)
+        finish_monitor_run(run_id, status="failed", error=sync_error)
 
     # Drain pending subtasks
     processed = process_pending_subtasks(active_repo, limit=20)
     logger.info("[monitor] poll cycle finished, processed %d subtasks", processed)
+
+    _last_heartbeat = now_iso()
+
+    return {
+        "repo": active_repo,
+        "run_id": run_id,
+        "status": sync_status,
+        "new_issues": new_issues,
+        "updated_issues": updated_issues,
+        "subtasks_created": subtasks_created,
+        "subtasks_processed": processed,
+        "error": sync_error,
+    }
 
 
 def start_scheduler() -> BackgroundScheduler:
@@ -83,19 +115,32 @@ def get_monitor_status(repo: str | None = None) -> dict:
     active_repo = repo or get_active_repo()
     conn = get_conn()
 
-    pending_count = conn.execute("SELECT COUNT(*) c FROM subtasks WHERE status = 'pending'").fetchone()["c"]
-    recent_subtasks = [dict(r) for r in conn.execute(
-        "SELECT * FROM subtasks ORDER BY id DESC LIMIT 15"
-    ).fetchall()]
-    recent_log = [dict(r) for r in conn.execute(
-        "SELECT * FROM monitor_log ORDER BY id DESC LIMIT 15"
-    ).fetchall()]
+    if active_repo:
+        pending_count = conn.execute(
+            "SELECT COUNT(*) c FROM subtasks WHERE status = 'pending' AND repo = ?", (active_repo,)
+        ).fetchone()["c"]
+        recent_monitor_runs = [dict(r) for r in conn.execute(
+            "SELECT * FROM monitor_runs WHERE repo = ? ORDER BY id DESC LIMIT 10", (active_repo,)
+        ).fetchall()]
+        recent_subtasks = [dict(r) for r in conn.execute(
+            "SELECT * FROM subtasks WHERE repo = ? ORDER BY id DESC LIMIT 20", (active_repo,)
+        ).fetchall()]
+        recent_log = [dict(r) for r in conn.execute(
+            "SELECT * FROM monitor_log WHERE repo = ? ORDER BY id DESC LIMIT 15", (active_repo,)
+        ).fetchall()]
+    else:
+        pending_count = 0
+        recent_monitor_runs = []
+        recent_subtasks = []
+        recent_log = []
 
     return {
         "scheduler_running": bool(_scheduler and _scheduler.running),
+        "last_heartbeat": _last_heartbeat,
         "poll_interval_seconds": settings.monitor_poll_interval_seconds,
         "active_repo": active_repo,
         "pending_subtasks": pending_count,
+        "recent_monitor_runs": recent_monitor_runs,
         "recent_subtasks": recent_subtasks,
         "recent_log": recent_log,
     }
@@ -104,5 +149,4 @@ def get_monitor_status(repo: str | None = None) -> dict:
 def trigger_check_now(repo: str | None = None) -> dict:
     target = repo or get_active_repo()
     log_monitor_event("manual_check_triggered", f"Manual trigger for {target}", repo=target)
-    poll_cycle()
-    return {"status": "ok", "message": f"Poll cycle triggered for {target}"}
+    return poll_cycle()
