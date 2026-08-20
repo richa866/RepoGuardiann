@@ -16,10 +16,19 @@ import {
 
 export function ListView2D({ issues = [], selectedIssue, onSelectIssue, feedbackMap = {} }) {
   const [search, setSearch] = useState('');
+  const [stateFilter, setStateFilter] = useState('open'); // 'open' | 'closed' | 'prs' | 'all'
   const [categoryFilter, setCategoryFilter] = useState('all');
 
+  const stats = useMemo(() => {
+    const openIssues = issues.filter(i => (i.state === 'open' || !i.state) && !i.is_pr).length;
+    const closedIssues = issues.filter(i => i.state === 'closed' && !i.is_pr).length;
+    const prs = issues.filter(i => i.is_pr).length;
+    const total = issues.length;
+    return { openIssues, closedIssues, prs, total };
+  }, [issues]);
+
   const categoriesList = [
-    { id: 'all', label: 'All Issues' },
+    { id: 'all', label: 'All Categories' },
     { id: 'security-sensitive', label: 'Security' },
     { id: 'urgent', label: 'Urgent' },
     { id: 'possible-regression', label: 'Regressions' },
@@ -31,22 +40,31 @@ export function ListView2D({ issues = [], selectedIssue, onSelectIssue, feedback
 
   const filteredIssues = useMemo(() => {
     return issues.filter((issue) => {
+      // State filter
+      if (stateFilter === 'open' && (issue.state === 'closed' || issue.is_pr)) return false;
+      if (stateFilter === 'closed' && (issue.state !== 'closed' || issue.is_pr)) return false;
+      if (stateFilter === 'prs' && !issue.is_pr) return false;
+
+      // Category filter
       const cats = issue.latest_categories || [];
       const matchCat = categoryFilter === 'all' || cats.includes(categoryFilter);
+
+      // Search filter
       const matchSearch =
         search === '' ||
         issue.title.toLowerCase().includes(search.toLowerCase()) ||
         String(issue.number).includes(search) ||
         (issue.body && issue.body.toLowerCase().includes(search.toLowerCase()));
+
       return matchCat && matchSearch;
     });
-  }, [issues, categoryFilter, search]);
+  }, [issues, stateFilter, categoryFilter, search]);
 
   return (
     <div className="w-full h-full pt-20 sm:pt-24 pb-6 px-4 sm:px-6 max-w-6xl mx-auto flex flex-col space-y-4 overflow-hidden">
-      {/* Controls: Search & Category Chips */}
+      {/* Controls: Search, State Filters & Category Chips */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-black/60 border border-white/10 backdrop-blur-2xl">
-        <div className="relative flex-1 min-w-[220px]">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
           <input
             type="text"
@@ -55,6 +73,50 @@ export function ListView2D({ issues = [], selectedIssue, onSelectIssue, feedback
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white/30 font-mono"
           />
+        </div>
+
+        {/* State Filter Pills */}
+        <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-xl border border-white/10">
+          <button
+            onClick={() => setStateFilter('open')}
+            className={`px-3 py-1 rounded-lg text-xs font-mono transition cursor-pointer ${
+              stateFilter === 'open'
+                ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Open Issues ({stats.openIssues})
+          </button>
+          <button
+            onClick={() => setStateFilter('closed')}
+            className={`px-3 py-1 rounded-lg text-xs font-mono transition cursor-pointer ${
+              stateFilter === 'closed'
+                ? 'bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Closed Issues ({stats.closedIssues})
+          </button>
+          <button
+            onClick={() => setStateFilter('prs')}
+            className={`px-3 py-1 rounded-lg text-xs font-mono transition cursor-pointer ${
+              stateFilter === 'prs'
+                ? 'bg-sky-500/20 text-sky-300 font-bold border border-sky-500/30'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Pull Requests ({stats.prs})
+          </button>
+          <button
+            onClick={() => setStateFilter('all')}
+            className={`px-3 py-1 rounded-lg text-xs font-mono transition cursor-pointer ${
+              stateFilter === 'all'
+                ? 'bg-white text-black font-bold'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            All ({stats.total})
+          </button>
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap overflow-x-auto max-w-full pb-0.5">
