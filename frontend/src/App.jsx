@@ -52,6 +52,31 @@ export default function App() {
   };
 
   // Load health, issues, and monitor loop status
+  // GET /issues is paginated (backend caps a single page at limit<=1000), and
+  // the true item count grows as a repo syncs -- a fixed limit=500 silently
+  // truncated to whatever GitHub's most-recently-updated 500 items were,
+  // which on an active repo skews toward PRs and undercounts real, older,
+  // still-open issues. Page through with offset until `total` is covered
+  // instead, so every count on screen (topbar, Filter Matrix, 3D
+  // constellation) reflects the backend's actual totals, not a stale slice.
+  const PAGE_SIZE = 500;
+
+  const fetchAllIssues = useCallback(async (repo) => {
+    const first = await api.listIssues({ repo, limit: PAGE_SIZE, offset: 0 });
+    const total = first?.data?.total ?? 0;
+    let all = first?.data?.issues ?? [];
+
+    const remainingRequests = [];
+    for (let offset = all.length; offset < total; offset += PAGE_SIZE) {
+      remainingRequests.push(api.listIssues({ repo, limit: PAGE_SIZE, offset }));
+    }
+    if (remainingRequests.length) {
+      const pages = await Promise.all(remainingRequests);
+      all = all.concat(...pages.map((p) => p?.data?.issues ?? []));
+    }
+    return all;
+  }, []);
+
   const refreshData = useCallback(async (targetRepo) => {
     const [{ data: h }, { data: repoRes }] = await Promise.all([
       api.health(targetRepo),
@@ -64,16 +89,18 @@ export default function App() {
       setHealth(h);
       const active = targetRepo || h.active_repo;
       if (active) {
-        const [{ data: issueRes }, { data: monRes }] = await Promise.all([
-          api.listIssues({ repo: active, limit: 500 }),
+        const [allIssues, { data: monRes }] = await Promise.all([
+          fetchAllIssues(active),
           api.monitorStatus(active),
         ]);
-        if (issueRes?.issues) {
-          setIssues(issueRes.issues);
-          // Build feedbackMap fresh from server on every refresh —
-          // no stale local accumulation, undo/reset are always reflected.
+        if (allIssues) {
+          setIssues(allIssues);
+          // Build feedbackMap fresh from server on every refresh -- no stale
+          // local accumulation, undo/reset are always reflected (the old
+          // accumulate-and-guard-with-!next[i.number] approach meant a
+          // server-side reset of an override would never clear client-side).
           const fresh = {};
-          issueRes.issues.forEach((i) => {
+          allIssues.forEach((i) => {
             if (i.latest_feedback) {
               fresh[i.number] = i.latest_feedback;
             } else if (i.latest_human_override) {
@@ -85,7 +112,7 @@ export default function App() {
         if (monRes) setMonitorStatus(monRes);
       }
     }
-  }, []);
+  }, [fetchAllIssues]);
 
   useEffect(() => {
     refreshData();

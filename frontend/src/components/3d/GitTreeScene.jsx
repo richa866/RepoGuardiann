@@ -968,9 +968,15 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
       });
       return seedList;
     }
-    // Only display OPEN non-PR issues in the 3D triage tree
-    const openNonPr = issues.filter((i) => (i.state === 'open' || !i.state) && !i.is_pr);
-    return openNonPr.length > 0 ? openNonPr : issues.filter((i) => !i.is_pr);
+    // Only display OPEN non-PR issues in the 3D triage tree. The fallback
+    // that used to sit here -- "if there are zero open non-PR issues, show
+    // every non-PR issue regardless of state instead" -- directly
+    // contradicted this comment's own stated intent, and silently swapped in
+    // closed/historical issues with no visual distinction from real open
+    // ones. A repo like pallets/flask genuinely has 0 open issues right now;
+    // it should render as an empty constellation, not as "198 issues" that
+    // are actually all closed.
+    return issues.filter((i) => (i.state === 'open' || !i.state) && !i.is_pr);
   }, [issues]);
 
   // Exclude overridden issues so the constellation genuinely shrinks and readjusts

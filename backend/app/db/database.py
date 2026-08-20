@@ -217,6 +217,52 @@ def upsert_issue(repo: str, issue: dict) -> bool:
     return changed
 
 
+def prune_stale_issues(repo: str, state: str, keep_numbers: set[int]) -> int:
+    """Deletes any issue row for this repo+state that isn't in keep_numbers,
+    along with its comments/escalations/subtasks/feedback -- so a sync's
+    "latest max_items" cap is what actually ends up stored, not a floor every
+    later sync just adds more on top of. E.g. pallets/flask accumulated 402
+    stored closed PRs across repeated capped-at-500 syncs, because nothing
+    ever removed what a previous run had already inserted.
+
+    Scoped to `state` specifically: the open-items fetch and the
+    closed-items fetch are pruned independently, right after each one's own
+    phase completes, so pruning stale closed items can never touch a
+    currently-open issue and vice versa. Only call this after a full/initial
+    sync's phase (state="open" or state="closed") -- an incremental poll's
+    small `since`-filtered slice is nowhere near a complete "latest
+    max_items" set, so pruning against it would wipe out everything a prior
+    full sync correctly stored. Returns how many issues were removed.
+    """
+    conn = get_conn()
+    if keep_numbers:
+        placeholders = ",".join("?" * len(keep_numbers))
+        stale = [
+            r["number"] for r in conn.execute(
+                f"SELECT number FROM issues WHERE repo = ? AND state = ? AND number NOT IN ({placeholders})",
+                (repo, state, *keep_numbers),
+            ).fetchall()
+        ]
+    else:
+        stale = [
+            r["number"] for r in conn.execute(
+                "SELECT number FROM issues WHERE repo = ? AND state = ?", (repo, state)
+            ).fetchall()
+        ]
+    if not stale:
+        return 0
+
+    with tx() as c:
+        for number in stale:
+            c.execute("DELETE FROM comments WHERE repo = ? AND issue_number = ?", (repo, number))
+            c.execute("DELETE FROM escalations WHERE repo = ? AND issue_number = ?", (repo, number))
+            c.execute("DELETE FROM subtasks WHERE repo = ? AND issue_number = ?", (repo, number))
+            c.execute("DELETE FROM feedback WHERE repo = ? AND issue_number = ?", (repo, number))
+        stale_placeholders = ",".join("?" * len(stale))
+        c.execute(f"DELETE FROM issues WHERE repo = ? AND number IN ({stale_placeholders})", (repo, *stale))
+    return len(stale)
+
+
 def replace_comments(repo: str, issue_number: int, comments: list[dict]) -> None:
     with tx() as c:
         c.execute("DELETE FROM comments WHERE repo = ? AND issue_number = ?", (repo, issue_number))
@@ -282,6 +328,16 @@ def upsert_repo(repo: str, token: str | None) -> None:
 def get_repo_row(repo: str) -> dict | None:
     row = get_conn().execute("SELECT * FROM repos WHERE repo = ?", (repo,)).fetchone()
     return dict(row) if row else None
+
+
+def list_all_repos() -> list[str]:
+    """Every repo ever connected, not just the active one. The background
+    poller uses this so switching the active repo doesn't leave every other
+    connected repo frozen at whatever state it was in when it stopped being
+    active -- poll_cycle() used to operate on get_active_repo() alone, so a
+    repo you weren't currently viewing would never get re-synced again."""
+    rows = get_conn().execute("SELECT repo FROM repos ORDER BY added_at DESC").fetchall()
+    return [r["repo"] for r in rows]
 
 
 def set_sync_state(

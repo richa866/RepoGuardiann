@@ -192,12 +192,25 @@ def embed_all_issues(repo: str | None = None, batch_size: int = 64) -> int:
 
 
 def collection_size(repo: str | None = None) -> int:
-    """Returns the total number of embedded documents in the collection without loading embedding model."""
+    """Returns the total number of embedded documents in the collection without
+    loading the embedding model.
+
+    Deliberately get_collection, NOT get_or_create_collection: this is a
+    read-only stat (GET /health calls it, so it runs before any sync has
+    happened). get_or_create would CREATE the collection here, and because we
+    don't pass an embedding_function, Chroma would persist it with its
+    DefaultEmbeddingFunction. Every later embed_issue() call -- which does pass
+    sentence_transformer -- then fails with "Embedding function conflict:
+    new: sentence_transformer vs persisted: default", killing the whole sync
+    and leaving zero issues in the DB. Counting must never define the
+    collection's config; only get_collection() above may do that.
+    """
     try:
         client = _get_client()
-        coll = client.get_or_create_collection(name=COLLECTION_NAME)
+        coll = client.get_collection(name=COLLECTION_NAME)
         return coll.count()
     except Exception:
+        # Not created yet (no sync has run) -- that's a legitimate zero.
         return 0
 
 

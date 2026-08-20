@@ -30,6 +30,7 @@ from app.db.database import (
     init_db,
     log_monitor_event,
     now_iso,
+    prune_stale_issues,
     replace_comments,
     set_active_repo,
     set_meta,
@@ -121,6 +122,7 @@ def normalize_comment(raw: dict, maintainer_logins: set[str]) -> dict:
 def fetch_repository_data(
     repo: str,
     token: str | None = None,
+    since: str | None = None,
     max_items: int = 300,
     force_refresh: bool = False,
     progress_callback: Callable[[str, int, int], None] | None = None,
@@ -158,7 +160,6 @@ def fetch_repository_data(
         )
 
         # 2. Issues & Comments
-        page = 1
         fetched_count = 0
         total_comments_count = 0
         open_count = 0
@@ -167,95 +168,169 @@ def fetch_repository_data(
         new_issue_count = 0
         updated_issue_count = 0
         subtasks_created_count = 0
+        per_page = 100
 
-        while fetched_count < max_items:
-            per_page = min(100, max_items - fetched_count)
-            page_cache = cache_root / "issues" / f"page_{page}.json"
+        # Two fetch strategies, chosen by whether this is the very first sync
+        # for this repo (since=None) or a periodic/incremental poll
+        # (since=<timestamp from the last sync>):
+        #
+        # - Initial/full sync (since=None): fetch state="open" up to
+        #   max_items, THEN state="closed" up to max_items -- each phase gets
+        #   its OWN budget (the same configured max_items, not a hardcoded
+        #   number, not split between them). Most-recent-first is GitHub's
+        #   own default sort (updated desc), unchanged. Previously open and
+        #   closed shared ONE combined budget (open items first), so closed
+        #   items -- and whatever mix of closed issues vs closed PRs happened
+        #   to be most recently updated within that shrinking budget -- got
+        #   whatever was left over. E.g. httpie/cli has 648 closed PRs on
+        #   GitHub; under the shared-budget version we only ever stored 325
+        #   of them. Now every phase, for every repo, gets the same full
+        #   max_items budget, so none of them compete with each other for it.
+        #
+        # - Incremental poll (since=<timestamp>): a single state="all" pass
+        #   with GitHub's `since` filter, also capped at max_items. Must stay
+        #   state="all" rather than split into open/closed -- a
+        #   state="open"-only query stops returning an issue the instant it's
+        #   closed, so it could never detect a close. Also see
+        #   effective_force_refresh below: without it, every poll tick was
+        #   replaying the very first cached page-1 response forever and never
+        #   actually reflecting anything that changed on GitHub, no matter how
+        #   often the scheduler ticked.
+        if since:
+            phases = [("all", max_items, since)]
+        else:
+            phases = [("open", max_items, None), ("closed", max_items, None)]
 
-            raw_issues_page, page_hit = get_cached_or_fetch(
-                page_cache,
-                lambda: client.list_issues(repo, state="all", per_page=per_page, page=page),
-                force_refresh=force_refresh,
-            )
+        # Incremental polls exist specifically to reflect live GitHub state, so
+        # they must never serve a stale cached page -- force_refresh=True here
+        # regardless of the caller's own force_refresh (which only governs the
+        # rarer, dev-facing initial/full-sync cache reuse).
+        effective_force_refresh = force_refresh or bool(since)
 
-            if not raw_issues_page or not isinstance(raw_issues_page, list):
-                break
+        for state, phase_budget, phase_since in phases:
+            phase_fetched = 0
+            phase_numbers: set[int] = set()
+            page = 1
+            while phase_fetched < phase_budget:
+                page_cache = cache_root / "issues" / f"page_{state}_{page}_per{per_page}.json"
 
-            for raw_issue in raw_issues_page:
-                norm_issue = normalize_issue(raw_issue)
-                # upsert_issue only reports changed/unchanged, not new-vs-updated --
-                # check existence first so monitor_runs can report the two separately.
-                is_new = get_conn().execute(
-                    "SELECT 1 FROM issues WHERE repo = ? AND number = ?",
-                    (repo, norm_issue["number"]),
-                ).fetchone() is None
-                changed = upsert_issue(repo, norm_issue)
-                fetched_count += 1
-
-                if norm_issue["state"] == "open":
-                    open_count += 1
-                else:
-                    closed_count += 1
-                if norm_issue["is_pr"]:
-                    pr_count += 1
-
-                # Fetch Comments if issue has comments
-                issue_comments = []
-                if norm_issue["comments_count"] > 0:
-                    comments_cache = cache_root / "comments" / f"issue_{norm_issue['number']}_comments.json"
-                    raw_comments, _ = get_cached_or_fetch(
-                        comments_cache,
-                        lambda: client.list_comments(repo, norm_issue["number"], max_items=100),
-                        force_refresh=force_refresh,
-                    )
-                    if isinstance(raw_comments, list):
-                        issue_comments = [
-                            normalize_comment(c, maintainer_logins) for c in raw_comments
-                        ]
-                        replace_comments(repo, norm_issue["number"], issue_comments)
-                        total_comments_count += len(issue_comments)
-
-                # Only embed + queue agent work for issues that actually changed --
-                # re-embedding/re-queueing ~300 unchanged issues on every sync would
-                # waste local embedding compute and spam the subtask queue (though
-                # enqueue_subtask's own dedupe_key would still no-op it, better to
-                # not even try). embed_issue itself doesn't need `changed` for
-                # correctness (Chroma upsert is idempotent) but there's no reason to
-                # redo it either.
-                if changed:
-                    if is_new:
-                        new_issue_count += 1
-                    else:
-                        updated_issue_count += 1
-                    embed_issue(repo=repo, issue=norm_issue, comments=issue_comments)
-                    _, created1 = enqueue_subtask(repo, "duplicate_check", norm_issue["number"], norm_issue["updated_at"])
-                    _, created2 = enqueue_subtask(repo, "missing_info_check", norm_issue["number"], norm_issue["updated_at"])
-                    subtasks_created_count += int(created1) + int(created2)
-
-                # Log one-line summary per issue processed
-                kind_str = "PR" if norm_issue["is_pr"] else "Issue"
-                title_snippet = (norm_issue["title"][:45] + "...") if len(norm_issue["title"]) > 45 else norm_issue["title"]
-                logger.info(
-                    "[fetch] Issue #%d [%s, %s] '%s' by @%s | %d comments (cache=%s)",
-                    norm_issue["number"],
-                    norm_issue["state"],
-                    kind_str,
-                    title_snippet,
-                    norm_issue["author"],
-                    len(issue_comments),
-                    "HIT" if page_hit else "MISS",
+                raw_issues_page, page_hit = get_cached_or_fetch(
+                    page_cache,
+                    lambda state=state, phase_since=phase_since, page=page: client.list_issues(
+                        repo, state=state, since=phase_since, per_page=per_page, page=page
+                    ),
+                    force_refresh=effective_force_refresh,
                 )
 
-                if progress_callback:
-                    progress_callback("fetching_issues", fetched_count, max_items)
-                set_sync_state(repo, current=fetched_count, total=max_items)
-
-                if fetched_count >= max_items:
+                if not raw_issues_page or not isinstance(raw_issues_page, list):
                     break
 
-            if len(raw_issues_page) < per_page:
-                break
-            page += 1
+                for raw_issue in raw_issues_page:
+                    norm_issue = normalize_issue(raw_issue)
+                    # upsert_issue only reports changed/unchanged, not new-vs-updated --
+                    # check existence first so monitor_runs can report the two separately.
+                    is_new = get_conn().execute(
+                        "SELECT 1 FROM issues WHERE repo = ? AND number = ?",
+                        (repo, norm_issue["number"]),
+                    ).fetchone() is None
+                    changed = upsert_issue(repo, norm_issue)
+                    fetched_count += 1
+                    phase_fetched += 1
+                    phase_numbers.add(norm_issue["number"])
+
+                    if norm_issue["state"] == "open":
+                        open_count += 1
+                    else:
+                        closed_count += 1
+                    if norm_issue["is_pr"]:
+                        pr_count += 1
+
+                    # Fetch Comments if issue has comments
+                    issue_comments = []
+                    if norm_issue["comments_count"] > 0:
+                        comments_cache = cache_root / "comments" / f"issue_{norm_issue['number']}_comments.json"
+                        raw_comments, _ = get_cached_or_fetch(
+                            comments_cache,
+                            lambda n=norm_issue["number"]: client.list_comments(repo, n, max_items=100),
+                            force_refresh=effective_force_refresh,
+                        )
+                        if isinstance(raw_comments, list):
+                            issue_comments = [
+                                normalize_comment(c, maintainer_logins) for c in raw_comments
+                            ]
+                            replace_comments(repo, norm_issue["number"], issue_comments)
+                            total_comments_count += len(issue_comments)
+
+                    # Only embed + queue agent work for issues that actually changed --
+                    # re-embedding/re-queueing ~300 unchanged issues on every sync would
+                    # waste local embedding compute and spam the subtask queue (though
+                    # enqueue_subtask's own dedupe_key would still no-op it, better to
+                    # not even try). embed_issue itself doesn't need `changed` for
+                    # correctness (Chroma upsert is idempotent) but there's no reason to
+                    # redo it either.
+                    if changed:
+                        if is_new:
+                            new_issue_count += 1
+                        else:
+                            updated_issue_count += 1
+                        embed_issue(repo=repo, issue=norm_issue, comments=issue_comments)
+                        _, created1 = enqueue_subtask(repo, "duplicate_check", norm_issue["number"], norm_issue["updated_at"])
+                        _, created2 = enqueue_subtask(repo, "missing_info_check", norm_issue["number"], norm_issue["updated_at"])
+                        subtasks_created_count += int(created1) + int(created2)
+
+                    # Log one-line summary per issue processed
+                    kind_str = "PR" if norm_issue["is_pr"] else "Issue"
+                    title_snippet = (norm_issue["title"][:45] + "...") if len(norm_issue["title"]) > 45 else norm_issue["title"]
+                    logger.info(
+                        "[fetch] Issue #%d [%s, %s] '%s' by @%s | %d comments (cache=%s)",
+                        norm_issue["number"],
+                        norm_issue["state"],
+                        kind_str,
+                        title_snippet,
+                        norm_issue["author"],
+                        len(issue_comments),
+                        "HIT" if page_hit else "MISS",
+                    )
+
+                    if progress_callback:
+                        progress_callback("fetching_issues", fetched_count, phase_budget)
+                    set_sync_state(repo, current=fetched_count, total=phase_budget)
+
+                    if phase_fetched >= phase_budget:
+                        break
+
+                if len(raw_issues_page) < per_page:
+                    break
+                page += 1
+
+            if phase_fetched >= max_items:
+                logger.warning(
+                    "[fetch] %s hit the max_items cap (%d) while fetching %s items -- "
+                    "some items beyond the latest %d may be missing from this sync",
+                    repo, max_items, state, max_items,
+                )
+
+            # "Show only the latest max_items" has to mean the DB actually
+            # forgets anything older than that window too, not just that this
+            # one fetch was capped -- otherwise every full sync only ever
+            # grows the stored total (each run adds up to max_items more
+            # on top of whatever was already there from a previous run),
+            # which is exactly how pallets/flask ended up with 402 stored
+            # closed PRs despite every individual sync being capped at
+            # max_items: old items from an earlier run just never left.
+            # Only prune on a full/initial sync (since=None) -- an
+            # incremental poll's `state="all"` phase only ever sees a small
+            # recently-changed slice, and phase_numbers there is nowhere near
+            # a complete "latest max_items" set, so pruning against it would
+            # wipe out everything the last full sync correctly stored.
+            if since is None:
+                removed = prune_stale_issues(repo, state, keep_numbers=phase_numbers)
+                if removed:
+                    logger.info(
+                        "[fetch] %s pruned %d stale %s item(s) outside the latest %d",
+                        repo, removed, state, max_items,
+                    )
+
 
         _, health_created = enqueue_subtask(repo, "health_trend_check", None)
         subtasks_created_count += int(health_created)
@@ -310,10 +385,18 @@ def run_sync(
     max_items: int = 300,
     progress_callback: Callable[[str, int, int], None] | None = None,
 ) -> dict:
-    """Wrapper function matching run_sync signature for background workers."""
+    """Wrapper function matching run_sync signature for background workers.
+
+    `since` used to be accepted here and silently dropped -- fetch_repository_data
+    was never told about it, so every periodic poll re-ran a full state="all"
+    fetch from page 1 instead of an incremental since-filtered one. Now threaded
+    through properly; see fetch_repository_data's phase-selection comment for
+    why `since` also implies force_refresh (a poll must never replay a stale
+    cached page)."""
     return fetch_repository_data(
         repo=repo,
         token=token,
+        since=since,
         max_items=max_items,
         force_refresh=False,
         progress_callback=progress_callback,
