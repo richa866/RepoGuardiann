@@ -959,7 +959,7 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
   const [isAutoRotating, setIsAutoRotating] = useState(false);
   const [viewPreset, setViewPreset] = useState('3d');
 
-  // Use real repository issues when available, fallback to demo seeds only if repository has 0 issues
+  // Use real repository issues when available, strictly displaying OPEN non-PR issues in the 3D tree
   const baselineIssues = useMemo(() => {
     if (!issues || issues.length === 0) {
       const seedList = [];
@@ -968,7 +968,9 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
       });
       return seedList;
     }
-    return issues;
+    // Only display OPEN non-PR issues in the 3D triage tree
+    const openNonPr = issues.filter((i) => (i.state === 'open' || !i.state) && !i.is_pr);
+    return openNonPr.length > 0 ? openNonPr : issues.filter((i) => !i.is_pr);
   }, [issues]);
 
   // Exclude overridden issues so the constellation genuinely shrinks and readjusts

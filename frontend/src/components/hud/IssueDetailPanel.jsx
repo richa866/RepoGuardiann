@@ -9,21 +9,25 @@ import {
   Sparkles, 
   Search, 
   MessageSquare, 
-  CheckCircle2,
-  AlertCircle,
-  Cpu,
-  ChevronDown,
-  ChevronUp,
-  Shield,
-  Activity,
-  Clock,
-  FileQuestion,
-  Users,
-  Flame,
-  Send,
-  Tag,
-  Lock,
-  Loader2
+  CheckCircle2, 
+  AlertCircle, 
+  Cpu, 
+  ChevronDown, 
+  ChevronUp, 
+  Shield, 
+  Activity, 
+  Clock, 
+  FileQuestion, 
+  Users, 
+  Flame, 
+  Send, 
+  Tag, 
+  Lock, 
+  Loader2,
+  GitPullRequest,
+  GitMerge,
+  Link as LinkIcon,
+  User
 } from 'lucide-react';
 import api from '../../api';
 import { RAGDiffModal } from './RAGDiffModal';
@@ -85,6 +89,20 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
   const contentiousnessCheck = evidence?.contentiousness_check || {};
   const responseTimeCheck = evidence?.response_time_check || {};
   const stalenessCheck = evidence?.staleness_check || {};
+
+  // Extract linked issues
+  const linkedIssues = (() => {
+    const text = `${issue.title || ''} ${issue.body || ''}`;
+    const regex = /(?:fixes|closes|resolves|re|see|ref)?\s*#(\d+)/gi;
+    const matches = new Set();
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      if (String(match[1]) !== String(issue.number)) {
+        matches.add(match[1]);
+      }
+    }
+    return Array.from(matches).slice(0, 4);
+  })();
 
   async function handleFeedback(vote, note = null) {
     setSubmittingFeedback(true);
@@ -188,6 +206,70 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
 
       {/* Highly Descriptive Scrollable Body Content */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs pr-2.5 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+        
+        {/* Contributor / Owner In-Depth Dossier Card */}
+        <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <img
+              src={`https://github.com/${issue.author}.png`}
+              alt={issue.author}
+              className="w-10 h-10 rounded-full border border-white/20 bg-zinc-800 shrink-0 object-cover shadow-sm"
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+            <div className="space-y-0.5 min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <a
+                  href={`https://github.com/${issue.author}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold text-white text-xs hover:text-sky-400 font-mono flex items-center gap-1 transition"
+                  title="View GitHub Profile"
+                >
+                  @{issue.author}
+                  <ExternalLink className="w-2.5 h-2.5 text-zinc-500" />
+                </a>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/10 text-zinc-300">
+                  {issue.is_pr ? 'PR Contributor' : 'Issue Reporter'}
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 font-mono">
+                {issue.created_at ? new Date(issue.created_at).toLocaleDateString() : 'Active Contributor'}
+              </p>
+            </div>
+          </div>
+
+          {issue.is_pr && (
+            <div className="shrink-0 text-right">
+              <span className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${
+                issue.state === 'open'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+              }`}>
+                {issue.state === 'open' ? <GitPullRequest className="w-3 h-3" /> : <GitMerge className="w-3 h-3" />}
+                {issue.state}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Linked Issues Bar if detected */}
+        {linkedIssues.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap p-2.5 rounded-xl bg-sky-950/20 border border-sky-500/20">
+            <span className="text-[11px] font-mono text-sky-400 flex items-center gap-1 font-semibold">
+              <LinkIcon className="w-3 h-3" />
+              Linked:
+            </span>
+            {linkedIssues.map((num) => (
+              <span
+                key={num}
+                className="text-[11px] font-mono px-2 py-0.5 rounded bg-sky-500/20 text-sky-200 border border-sky-500/30"
+              >
+                #{num}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Title & Description */}
         <div className="space-y-2">
           <h2 className="text-sm sm:text-base font-semibold text-white leading-snug tracking-tight">
@@ -195,7 +277,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
           </h2>
           {issue.body && (
             <div className="space-y-1">
-              <span className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">Issue Description</span>
+              <span className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">Description</span>
               <div className="text-xs text-zinc-300 font-mono leading-relaxed bg-white/[0.03] p-3 rounded-2xl border border-white/[0.06] max-h-40 overflow-y-auto whitespace-pre-wrap">
                 {issue.body}
               </div>
@@ -450,6 +532,49 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
 
               <div className="text-zinc-300 font-mono text-xs bg-white/[0.03] p-3 rounded-2xl border border-white/[0.06] whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
                 {draftedComment}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Reviewer & Contributor Discussion Activity */}
+        {detail?.comments && detail.comments.length > 0 && (
+          <>
+            <div className="h-px bg-white/[0.06]" />
+            <div className="space-y-2.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider font-mono text-white flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5 text-sky-400" />
+                Discussion & Review Activity ({detail.comments.length})
+              </span>
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {detail.comments.map((c, idx) => (
+                  <div key={c.id || idx} className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <img
+                          src={`https://github.com/${c.author}.png`}
+                          alt={c.author}
+                          className="w-4 h-4 rounded-full bg-zinc-800 shrink-0 object-cover"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                        <span className="font-mono text-xs font-semibold text-zinc-200 truncate">
+                          @{c.author}
+                        </span>
+                        {c.is_maintainer ? (
+                          <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold">
+                            MAINTAINER
+                          </span>
+                        ) : null}
+                      </div>
+                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">
+                        {c.created_at ? new Date(c.created_at).toLocaleDateString() : ''}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-300 font-mono leading-relaxed whitespace-pre-wrap">
+                      {c.body}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           </>

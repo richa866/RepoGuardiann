@@ -7,6 +7,7 @@ import { TopNav } from './components/hud/TopNav';
 import { MonitorPanel } from './components/hud/MonitorPanel';
 import { IssueDetailPanel } from './components/hud/IssueDetailPanel';
 import { ListView2D } from './components/hud/ListView2D';
+import { PullRequestsView } from './components/hud/PullRequestsView';
 import { HealthMetricsView } from './components/hud/HealthMetricsView';
 import { WeeklyBriefView } from './components/hud/WeeklyBriefView';
 import { ConnectRepoModal } from './components/hud/ConnectRepoModal';
@@ -235,6 +236,15 @@ export default function App() {
               isChecking={isChecking}
             />
           </div>
+        )}
+
+        {activeView === 'prs' && (
+          <PullRequestsView
+            issues={issues}
+            selectedIssue={selectedIssue}
+            onSelectIssue={setSelectedIssue}
+            feedbackMap={feedbackMap}
+          />
         )}
 
         {activeView === 'list' && (

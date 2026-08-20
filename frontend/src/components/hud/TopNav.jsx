@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GuardianLogo3D } from '../3d/GuardianLogo3D';
 import { 
   GitBranch, 
+  GitPullRequest,
   RotateCw, 
   Zap, 
   Layers, 
@@ -47,6 +48,7 @@ export function TopNav({
 
   const views = [
     { id: '3d', label: '3D Triage', short: '3D', icon: Layers },
+    { id: 'prs', label: 'Pull Requests', short: 'PRs', icon: GitPullRequest },
     { id: 'topology', label: 'Git Branches', short: 'Branches', icon: Zap },
     { id: 'list', label: '2D Table', short: 'Table', icon: List },
     { id: 'health', label: 'Health', short: 'Health', icon: Activity },
