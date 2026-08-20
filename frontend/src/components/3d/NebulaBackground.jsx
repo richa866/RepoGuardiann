@@ -15,12 +15,12 @@ const THEME_RAMPS = {
     bg: [0.015, 0.027, 0.078],
   },
   security_urgent: {
-    c1: [0.937, 0.267, 0.267], // Crimson
-    c2: [0.976, 0.451, 0.086], // Fire Orange
-    c3: [0.992, 0.878, 0.278], // Solar Flare Gold
-    c4: [0.498, 0.114, 0.114], // Deep Blood Red
-    c5: [0.200, 0.020, 0.050], // Obsidian Red
-    bg: [0.050, 0.015, 0.025],
+    c1: [0.72, 0.16, 0.22], // Muted Ruby Filament
+    c2: [0.80, 0.32, 0.12], // Warm Ember
+    c3: [0.90, 0.70, 0.35], // Stardust Gold
+    c4: [0.18, 0.06, 0.14], // Deep Plum Obsidian
+    c5: [0.06, 0.04, 0.12], // Midnight Void
+    bg: [0.015, 0.020, 0.045], // Deep Cosmic Obsidian
   },
   regression: {
     c1: [0.851, 0.275, 0.937], // Magenta

@@ -26,6 +26,7 @@ export default function App() {
   const [isConnectOpen, setIsConnectOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
+  const [feedbackMap, setFeedbackMap] = useState({});
   const [toastMsg, setToastMsg] = useState(null);
 
   const showToast = (msg) => {
@@ -43,7 +44,20 @@ export default function App() {
           api.listIssues({ repo: h.active_repo, limit: 100 }),
           api.monitorStatus(h.active_repo),
         ]);
-        if (issueRes?.issues) setIssues(issueRes.issues);
+        if (issueRes?.issues) {
+          setIssues(issueRes.issues);
+          setFeedbackMap((prev) => {
+            const next = { ...prev };
+            issueRes.issues.forEach((i) => {
+              if (i.latest_feedback && !next[i.number]) {
+                next[i.number] = i.latest_feedback;
+              } else if (i.latest_human_override && !next[i.number]) {
+                next[i.number] = i.latest_human_override === 'confirmed' ? 'up' : 'down';
+              }
+            });
+            return next;
+          });
+        }
         if (monRes) setMonitorStatus(monRes);
       }
     }
@@ -95,6 +109,10 @@ export default function App() {
   };
 
   const handleFeedbackSubmitted = (issueNum, vote) => {
+    setFeedbackMap((prev) => ({ ...prev, [issueNum]: vote }));
+    if (vote === 'down' && selectedIssue?.number === issueNum) {
+      setSelectedIssue(null);
+    }
     showToast(`Feedback recorded for #${issueNum} (${vote === 'up' ? 'Confirmed' : 'Overridden'})`);
     refreshData();
   };
@@ -175,11 +193,13 @@ export default function App() {
               issues={issues}
               selectedIssue={selectedIssue}
               onSelectIssue={setSelectedIssue}
+              feedbackMap={feedbackMap}
               fallback={
                 <ListView2D
                   issues={issues}
                   selectedIssue={selectedIssue}
                   onSelectIssue={setSelectedIssue}
+                  feedbackMap={feedbackMap}
                 />
               }
             />
@@ -197,6 +217,7 @@ export default function App() {
             issues={issues}
             selectedIssue={selectedIssue}
             onSelectIssue={setSelectedIssue}
+            feedbackMap={feedbackMap}
           />
         )}
 
@@ -215,6 +236,7 @@ export default function App() {
           issue={selectedIssue}
           onClose={() => setSelectedIssue(null)}
           onFeedbackSubmitted={handleFeedbackSubmitted}
+          feedbackMap={feedbackMap}
         />
       )}
 

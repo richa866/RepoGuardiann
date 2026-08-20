@@ -350,7 +350,7 @@ export function getConstellationFormation(count) {
   }
 
   if (count === 3) {
-    const r = 6.2;
+    const r = 7.5;
     const p0 = [0, r, 0];
     const p1 = [-r * Math.sin(Math.PI / 3), -r * Math.cos(Math.PI / 3), 0.6];
     const p2 = [r * Math.sin(Math.PI / 3), -r * Math.cos(Math.PI / 3), -0.6];
@@ -361,8 +361,8 @@ export function getConstellationFormation(count) {
   }
 
   if (count === 4) {
-    const rx = 7.2;
-    const ry = 6.0;
+    const rx = 8.5;
+    const ry = 6.8;
     return {
       positions: [
         [0, ry, 0],
@@ -375,7 +375,7 @@ export function getConstellationFormation(count) {
   }
 
   if (count === 5) {
-    const r = 7.4;
+    const r = 8.6;
     const positions = [];
     for (let i = 0; i < 5; i++) {
       const angle = (i * 2 * Math.PI) / 5 - Math.PI / 2;
@@ -631,7 +631,8 @@ function SceneContent({
   isUserInteracting,
   activeFilter = 'all',
   viewPreset = '3d',
-  resetTrigger = 0
+  resetTrigger = 0,
+  feedbackMap = {}
 }) {
   const { nodeData, clusterList, connections, selectedPos, autoFrameConfig } = useMemo(() => {
     const clusterMap = {
@@ -685,7 +686,7 @@ function SceneContent({
         const { positions, connections: shapeConns } = getConstellationFormation(visibleIssues.length);
 
         const minY = Math.min(...positions.map((p) => p[1]));
-        const tagPos = [0, minY - 3.5, 0];
+        const tagPos = [0, minY - 4.8, 0];
 
         activeClusters.push({
           ...clusterCfg,
@@ -887,6 +888,7 @@ function SceneContent({
             selectedIssue={selectedIssue}
             isClosest={closestNodeKey === `${issue.repo}-${issue.number}`}
             isFiltered={activeFilter !== 'all'}
+            isConfirmed={feedbackMap[issue.number] === 'up'}
             nodeIndex={idx}
             onSelect={onSelectIssue}
           />
@@ -905,7 +907,7 @@ function SceneContent({
   );
 }
 
-export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallback }) {
+export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedbackMap = {}, fallback }) {
   const controlsRef = useRef();
   const isUserInteracting = useRef(false);
   const [activeFilter, setActiveFilter] = useState('all');
@@ -913,8 +915,8 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
   const [isAutoRotating, setIsAutoRotating] = useState(false);
   const [viewPreset, setViewPreset] = useState('3d');
 
-  // Guarantee minimum 3 nodes per sub-type
-  const augmentedIssues = useMemo(() => {
+  // Guarantee initial 3 nodes per sub-type at baseline, but NEVER re-add overridden issues
+  const baselineIssues = useMemo(() => {
     const byCategory = {
       security_urgent: [],
       regression: [],
@@ -953,6 +955,11 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
 
     return finalIssues;
   }, [issues]);
+
+  // Exclude overridden issues so the constellation genuinely shrinks and readjusts
+  const augmentedIssues = useMemo(() => {
+    return baselineIssues.filter((i) => feedbackMap[i.number] !== 'down');
+  }, [baselineIssues, feedbackMap]);
 
   // Filter issues for sequential stepping
   const visibleIssues = useMemo(() => {
@@ -1159,16 +1166,19 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
             onDoubleClick={() => handleResetView()}
           >
             <color attach="background" args={[bgColor]} />
-            <SceneContent
-              issues={augmentedIssues}
-              selectedIssue={selectedIssue}
-              onSelectIssue={onSelectIssue}
-              controlsRef={controlsRef}
-              isUserInteracting={isUserInteracting}
-              activeFilter={activeFilter}
-              viewPreset={viewPreset}
-              resetTrigger={resetTrigger}
-            />
+            <Suspense fallback={null}>
+              <SceneContent
+                issues={augmentedIssues}
+                selectedIssue={selectedIssue}
+                onSelectIssue={onSelectIssue}
+                controlsRef={controlsRef}
+                isUserInteracting={isUserInteracting}
+                activeFilter={activeFilter}
+                viewPreset={viewPreset}
+                resetTrigger={resetTrigger}
+                feedbackMap={feedbackMap}
+              />
+            </Suspense>
 
             {/* Butter-Smooth Orbit Controls with Inertia & Soft Limits */}
             <OrbitControls

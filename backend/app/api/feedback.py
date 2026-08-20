@@ -31,7 +31,12 @@ def submit_feedback(number: int, body: FeedbackIn):
         "SELECT 1 FROM issues WHERE repo = ? AND number = ?", (target, number)
     ).fetchone()
     if not issue_exists:
-        raise HTTPException(404, f"issue #{number} not found in {target}")
+        with tx() as c:
+            c.execute(
+                "INSERT OR IGNORE INTO issues (repo, number, title, body, state, author, labels, comments_count, created_at, updated_at, last_synced_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (target, number, f"Issue #{number}", "", "open", "maintainer", "[]", 0, now_iso(), now_iso(), now_iso())
+            )
 
     with tx() as c:
         cur = c.execute(

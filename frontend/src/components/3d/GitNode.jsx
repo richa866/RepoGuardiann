@@ -1,6 +1,6 @@
 import React, { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { useGLTF, Html } from '@react-three/drei';
+import { useGLTF, useTexture, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { 
   ShieldAlert, 
@@ -11,7 +11,8 @@ import {
   CheckCircle2, 
   GitPullRequest, 
   MessageSquare,
-  Clock
+  Clock,
+  Check
 } from 'lucide-react';
 
 // Generates meaningful, concise 1-line triage summaries instead of generic titles
@@ -91,16 +92,23 @@ export function GitNode({
   selectedIssue, 
   isClosest = false,
   isFiltered = false,
+  isConfirmed = false,
   nodeIndex = 0,
   onSelect 
 }) {
   const groupRef = useRef();
+  const orbRef = useRef();
+  const ringRef = useRef();
   const [hovered, setHovered] = useState(false);
   const isInRangeRef = useRef(true);
   const [isInRange, setIsInRange] = useState(true);
 
-  const { scene } = useGLTF('/models/smooth_issue_orb.glb');
-  const clonedScene = useMemo(() => scene.clone(true), [scene]);
+  // Exact same crystal model and textures as the Git Branch Graph
+  const { scene } = useGLTF('/models/git_branch_node.glb');
+  const [crystalNormal, crystalRoughness] = useTexture([
+    '/textures/crystal_normal.png',
+    '/textures/crystal_roughness.png',
+  ]);
 
   const categories = issue?.latest_categories || [];
   const isSecurity = categories.includes('security-sensitive');
@@ -114,13 +122,21 @@ export function GitNode({
     categories.some((c) => typeof c === 'string' && c.toLowerCase().includes('info'));
   const isDuplicate = categories.includes('likely-duplicate');
   const isStale = categories.includes('stale/needs-triage');
-  const isEscalated = isSecurity || isUrgent || isContentious || isRegression;
 
   const isOtherSelected = Boolean(
     selectedIssue && (selectedIssue.number !== issue.number || selectedIssue.repo !== issue.repo)
   );
 
   const { color, glowColor, baseIntensity, pulseSpeed, opacity } = useMemo(() => {
+    if (isConfirmed) {
+      return {
+        color: new THREE.Color('#10b981'),
+        glowColor: new THREE.Color('#34d399'),
+        baseIntensity: 3.2,
+        pulseSpeed: 1.2,
+        opacity: 1.0,
+      };
+    }
     if (isSecurity) {
       return {
         color: new THREE.Color('#f43f5e'),
@@ -182,24 +198,31 @@ export function GitNode({
       pulseSpeed: 1.0,
       opacity: 0.95,
     };
-  }, [isSecurity, isUrgent, isContentious, isRegression, isDuplicate, isStale, isNeedsInfo]);
+  }, [isConfirmed, isSecurity, isUrgent, isContentious, isRegression, isDuplicate, isStale, isNeedsInfo]);
 
-  // Apply smooth material styles
-  useMemo(() => {
-    clonedScene.traverse((child) => {
-      if (child.isMesh && child.material) {
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone(true);
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.material = child.material.clone();
         child.material.color = color;
+        child.material.normalMap = crystalNormal;
+        child.material.normalScale = new THREE.Vector2(1.5, 1.5);
+        child.material.roughnessMap = crystalRoughness;
         if (child.material.emissive) {
           child.material.emissive = glowColor;
           child.material.emissiveIntensity = baseIntensity;
         }
         child.material.transparent = opacity < 1.0;
         child.material.opacity = opacity;
-        child.material.roughness = 0.1;
-        child.material.metalness = 0.85;
+        child.material.roughness = 0.2;
+        child.material.metalness = 0.88;
+        child.material.clearcoat = 0.6;
+        child.material.needsUpdate = true;
       }
     });
-  }, [clonedScene, color, glowColor, baseIntensity, opacity]);
+    return clone;
+  }, [scene, color, glowColor, baseIntensity, opacity, crystalNormal, crystalRoughness]);
 
   useFrame((state) => {
     if (!groupRef.current) return;
@@ -213,11 +236,32 @@ export function GitNode({
       setIsInRange(inRange);
     }
 
-    const yOffset = Math.sin(t * 1.5 + position[0] * 0.4) * 0.15;
-    groupRef.current.position.y = position[1] + yOffset;
+    // Smoothly glide to the target constellation position with lerp (0.08)
+    if (!isFiltered) {
+      const yOffset = Math.sin(t * 1.5 + position[0] * 0.4) * 0.12;
+      groupRef.current.position.x = THREE.MathUtils.lerp(groupRef.current.position.x, position[0], 0.08);
+      groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, position[1] + yOffset, 0.08);
+      groupRef.current.position.z = THREE.MathUtils.lerp(groupRef.current.position.z, position[2], 0.08);
+    } else {
+      groupRef.current.position.x = THREE.MathUtils.lerp(groupRef.current.position.x, position[0], 0.08);
+      groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, position[1], 0.08);
+      groupRef.current.position.z = THREE.MathUtils.lerp(groupRef.current.position.z, position[2], 0.08);
+    }
 
-    groupRef.current.rotation.y += 0.01;
-    groupRef.current.rotation.x = Math.sin(t * 0.6) * 0.05;
+    // Spin ONLY the inner crystal orb, keeping groupRef and Html card completely static
+    if (orbRef.current) {
+      orbRef.current.rotation.y += 0.012;
+      orbRef.current.rotation.x = Math.sin(t * 0.6) * 0.05;
+
+      const targetScale = isSelected ? 1.35 : hovered ? 1.2 : 1.0;
+      orbRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
+    }
+
+    // Orbiting verified ring animation
+    if (ringRef.current) {
+      ringRef.current.rotation.z += 0.02;
+      ringRef.current.rotation.x = Math.sin(t * 1.2) * 0.3;
+    }
 
     if (pulseSpeed > 0) {
       const pulse = Math.sin(t * pulseSpeed) * 0.5 + 0.5;
@@ -232,9 +276,6 @@ export function GitNode({
         }
       });
     }
-
-    const targetScale = isSelected ? 1.35 : hovered ? 1.2 : 1.0;
-    groupRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
   });
 
   const categoryLabel = categories[0]
@@ -246,23 +287,30 @@ export function GitNode({
   const summaryText = getIssueSummary(issue);
   const descriptionText = issue?.title || 'No description provided';
 
-  // Alternating cardinal anchor offset to guarantee zero card overlap
+  // Radial outward label offset calculation to guarantee zero overlap and maximum separation
   const labelOffset = useMemo(() => {
-    if (isSelected || hovered) return [0, 1.85, 0];
-    
+    if (isSelected || hovered) return [0, 1.9, 0];
+
+    if (isFiltered) {
+      const [x, y] = position;
+      if (Math.abs(x) < 1.0 && y > 1.0) return [0, 2.1, 0];
+      if (Math.abs(x) < 1.0 && y < -1.0) return [0, -2.1, 0];
+      if (x < -1.0 && y < 0) return [-2.8, -0.6, 0];
+      if (x > 1.0 && y < 0) return [2.8, -0.6, 0];
+      if (x < -1.0 && y >= 0) return [-2.8, 0.6, 0];
+      if (x > 1.0 && y >= 0) return [2.8, 0.6, 0];
+    }
+
     const slot = nodeIndex % 4;
     switch (slot) {
-      case 0: return [0, 1.85, 0];     // Top
-      case 1: return [0, -1.85, 0];    // Bottom
-      case 2: return [2.2, 0.2, 0];    // Right
-      case 3: return [-2.2, 0.2, 0];   // Left
-      default: return [0, 1.85, 0];
+      case 0: return [0, 1.9, 0];
+      case 1: return [0, -1.9, 0];
+      case 2: return [2.4, 0.2, 0];
+      case 3: return [-2.4, 0.2, 0];
+      default: return [0, 1.9, 0];
     }
-  }, [nodeIndex, isSelected, hovered]);
+  }, [nodeIndex, isSelected, hovered, isFiltered, position]);
 
-  // Level of Detail (LOD) Hierarchy:
-  // - Full Expanded Card: Shown if selected, hovered, in filtered sub-type, or is the single closest node to camera
-  // - Compact Micro-Pill: Shown for nearby cluster neighbors in All Matrix
   const isExpanded = isSelected || hovered || isFiltered || isClosest;
   const showTag = isExpanded || (!isOtherSelected && isInRange);
 
@@ -284,17 +332,30 @@ export function GitNode({
         document.body.style.cursor = 'auto';
       }}
     >
-      <primitive object={clonedScene} scale={0.75} />
+      {/* Rotating Textured 3D Crystal Node */}
+      <group ref={orbRef}>
+        <primitive object={clonedScene} scale={0.7} />
 
-      {/* Selected Minimalist Ring */}
-      {isSelected && (
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[1.25, 1.4, 32]} />
-          <meshBasicMaterial color="#ffffff" side={THREE.DoubleSide} transparent opacity={0.9} />
-        </mesh>
-      )}
+        {/* Selected Minimalist Ring */}
+        {isSelected && (
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[1.25, 1.4, 32]} />
+            <meshBasicMaterial color="#ffffff" side={THREE.DoubleSide} transparent opacity={0.9} />
+          </mesh>
+        )}
 
-      {/* 3D Transformed Billboard Label with Cardinal Offsets & Focus-Tiered Anti-Collision */}
+        {/* Confirmed Orbital Emerald Ring */}
+        {isConfirmed && (
+          <group ref={ringRef}>
+            <mesh rotation={[Math.PI / 3, Math.PI / 4, 0]}>
+              <torusGeometry args={[1.15, 0.035, 16, 32]} />
+              <meshBasicMaterial color="#10b981" transparent opacity={0.85} />
+            </mesh>
+          </group>
+        )}
+      </group>
+
+      {/* Static 3D Transformed Billboard Label with Radial Outward Offsets */}
       {showTag && (
         <Html
           transform
@@ -305,37 +366,46 @@ export function GitNode({
           className="pointer-events-none select-none animate-in fade-in zoom-in-95 duration-200"
         >
           {isExpanded ? (
-            /* Mode A: Full Rich Triage Card (Hero Node / Filtered Sub-Types / Hover / Select) */
+            /* Mode A: Full Rich Triage Card */
             <div
               className={`flex flex-col gap-1.5 p-3 rounded-2xl font-mono backdrop-blur-3xl border transition-all w-64 shadow-2xl ${
                 isSelected
                   ? 'bg-white text-black border-white shadow-[0_0_35px_rgba(255,255,255,0.4)] scale-105 z-20'
                   : hovered
                   ? 'bg-black/90 text-white border-white/40 scale-105 shadow-black/90 z-20'
+                  : isConfirmed
+                  ? 'bg-emerald-950/80 text-white border-emerald-500/40 shadow-emerald-950/80'
                   : 'bg-black/80 text-white border-white/25 shadow-black/80'
               }`}
             >
-              {/* Header Row: Number + Category Badge */}
+              {/* Header Row: Number + Category Badge / Confirmed Badge */}
               <div className="flex items-center justify-between gap-1.5 border-b border-white/10 pb-1">
                 <div className="flex items-center gap-1.5 font-bold">
                   <span
                     className="w-2 h-2 rounded-full shrink-0 shadow-sm"
-                    style={{ backgroundColor: isSelected ? '#000000' : `#${color.getHexString()}` }}
+                    style={{ backgroundColor: isSelected ? '#000000' : isConfirmed ? '#10b981' : `#${color.getHexString()}` }}
                   />
                   <span className={`font-mono text-xs font-bold ${isSelected ? 'text-black' : 'text-white'}`}>
                     #{issue?.number}
                   </span>
                 </div>
 
-                <span
-                  className={`text-[9px] uppercase font-mono px-2 py-0.5 rounded-full ${
-                    isSelected
-                      ? 'bg-black text-white font-bold'
-                      : 'bg-white/10 text-zinc-300 border border-white/15'
-                  }`}
-                >
-                  {categoryLabel}
-                </span>
+                <div className="flex items-center gap-1">
+                  {isConfirmed && (
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold flex items-center gap-0.5">
+                      <Check className="w-2.5 h-2.5 text-emerald-400" /> Confirmed
+                    </span>
+                  )}
+                  <span
+                    className={`text-[9px] uppercase font-mono px-2 py-0.5 rounded-full ${
+                      isSelected
+                        ? 'bg-black text-white font-bold'
+                        : 'bg-white/10 text-zinc-300 border border-white/15'
+                    }`}
+                  >
+                    {categoryLabel}
+                  </span>
+                </div>
               </div>
 
               {/* Agentic Semantic Triage Summary */}
@@ -343,19 +413,24 @@ export function GitNode({
                 {summaryText}
               </div>
 
-              {/* Issue Description Excerpt */}
-              <div className={`text-[10px] font-sans line-clamp-2 leading-snug ${isSelected ? 'text-zinc-700' : 'text-zinc-400'}`}>
+              {/* Issue Description Excerpt (Scrollable on hover/select) */}
+              <div className={`text-[10px] font-sans leading-snug ${
+                isSelected ? 'text-zinc-700 max-h-24 overflow-y-auto pointer-events-auto pr-1' : 'text-zinc-400 line-clamp-2'
+              }`}>
                 {descriptionText}
               </div>
             </div>
           ) : (
-            /* Mode B: Minimalist Non-Intrusive Micro-Pill (Nearby Background Nodes in All Matrix) */
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono backdrop-blur-2xl border border-white/15 bg-black/75 shadow-lg whitespace-nowrap text-zinc-300 hover:text-white transition-all">
+            /* Mode B: Minimalist Non-Intrusive Micro-Pill */
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono backdrop-blur-2xl border shadow-lg whitespace-nowrap text-zinc-300 hover:text-white transition-all ${
+              isConfirmed ? 'bg-emerald-950/80 border-emerald-500/40' : 'bg-black/75 border-white/15'
+            }`}>
               <span
                 className="w-2 h-2 rounded-full shrink-0 shadow-sm"
-                style={{ backgroundColor: `#${color.getHexString()}` }}
+                style={{ backgroundColor: isConfirmed ? '#10b981' : `#${color.getHexString()}` }}
               />
               <span className="font-bold text-white font-mono">#{issue?.number}</span>
+              {isConfirmed && <span className="text-[10px] text-emerald-400 font-bold">✓</span>}
               <span className="text-[10px] text-zinc-400 uppercase">{categoryLabel}</span>
             </div>
           )}
@@ -365,4 +440,6 @@ export function GitNode({
   );
 }
 
-useGLTF.preload('/models/smooth_issue_orb.glb');
+useGLTF.preload('/models/git_branch_node.glb');
+useTexture.preload('/textures/crystal_normal.png');
+useTexture.preload('/textures/crystal_roughness.png');
