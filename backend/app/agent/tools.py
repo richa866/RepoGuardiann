@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timezone
 
 from app.db.database import get_conn
-from app.llm import synthesize_json
+from app.llm import short_error, synthesize_json
 from app.rag.retrieval import find_similar, get_decision_context
 
 logger = logging.getLogger("repoguardian.agent.tools")
@@ -364,7 +364,7 @@ Respond with a JSON object:
     except Exception as exc:
         logger.info(
             "LLM missing-info check unavailable or failed for %s#%s (%s); using heuristic fallback",
-            repo, issue_number, exc,
+            repo, issue_number, short_error(exc),
         )
         result = _heuristic_missing_info_check(issue)
         result["method"] = "heuristic-fallback"

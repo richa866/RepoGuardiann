@@ -107,14 +107,18 @@ def process_one_subtask(subtask: dict) -> dict:
             return {}
 
     except Exception as exc:
-        logger.exception("Subtask %s failed: %s", subtask_id, exc)
+        # .warning(), not .exception(): a full traceback per failed subtask
+        # is exactly the noise a screen-shared /monitor/status is supposed
+        # to be free of. The real error text is still in the message and in
+        # subtasks.log for anyone who needs to dig in.
+        logger.warning("[processor] subtask %s (%s) failed: %s", subtask_id, task_type, exc)
         try:
             mark_subtask_failed(subtask_id, str(exc))
         except Exception:
             # DB itself is the thing failing (disk full, locked, etc.) --
             # nothing more we can do here, but this must not propagate: the
             # caller's per-item loop needs to move on to the next subtask.
-            logger.exception("Subtask %s: also failed to record the failure", subtask_id)
+            logger.warning("[processor] subtask %s: also failed to record the failure", subtask_id)
         return {"error": str(exc)}
 
 
@@ -122,7 +126,7 @@ def process_pending_subtasks(repo: str | None = None, limit: int = 10) -> int:
     try:
         pending = get_pending_subtasks(repo, limit=limit)
     except Exception as exc:
-        logger.exception("Failed to fetch pending subtasks: %s", exc)
+        logger.warning("[processor] failed to fetch pending subtasks: %s", exc)
         return 0
 
     processed = 0
@@ -134,6 +138,6 @@ def process_pending_subtasks(repo: str | None = None, limit: int = 10) -> int:
             # work -- this is only reached if something outside that (e.g.
             # a malformed subtask row) blows up. Log and keep draining the
             # rest of the batch rather than losing it.
-            logger.exception("Subtask %s crashed outside its own handler: %s", st.get("id"), exc)
+            logger.warning("[processor] subtask %s crashed outside its own handler: %s", st.get("id"), exc)
         processed += 1
     return processed

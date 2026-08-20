@@ -11,6 +11,15 @@ import google.generativeai as genai
 from app.config import settings
 
 
+def short_error(exc: Exception, limit: int = 150) -> str:
+    """Google's API exceptions stringify to many lines (quota violation
+    details, doc links, protobuf dumps) -- fine to raise, not fine to log at
+    full length every time a caller falls back. Callers logging a Gemini
+    failure should use this instead of embedding str(exc) directly."""
+    text = str(exc).split("\n", 1)[0].strip()
+    return text if len(text) <= limit else text[:limit] + "..."
+
+
 def _model():
     api_key = settings.require_gemini()
     genai.configure(api_key=api_key)

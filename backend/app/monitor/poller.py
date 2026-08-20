@@ -129,8 +129,15 @@ def get_monitor_status(repo: str | None = None) -> dict:
         recent_monitor_runs = [dict(r) for r in conn.execute(
             "SELECT * FROM monitor_runs WHERE repo = ? ORDER BY id DESC LIMIT 10", (active_repo,)
         ).fetchall()]
+        # Deliberately not "SELECT *": result_json is a full raw tool-output
+        # blob (nested match lists, decision context, snippets) that reads as
+        # noise in a status glance view, not a demo-clean summary. `log` is
+        # already the short human line each subtask was marked done/failed
+        # with (e.g. "Ran duplicate_check for #3764") -- that's what belongs
+        # here. The full result is still in the DB for anyone who needs it.
         recent_subtasks = [dict(r) for r in conn.execute(
-            "SELECT * FROM subtasks WHERE repo = ? ORDER BY id DESC LIMIT 20", (active_repo,)
+            "SELECT id, issue_number, task_type, status, log, created_at, started_at, finished_at "
+            "FROM subtasks WHERE repo = ? ORDER BY id DESC LIMIT 20", (active_repo,)
         ).fetchall()]
         recent_log = [dict(r) for r in conn.execute(
             "SELECT * FROM monitor_log WHERE repo = ? ORDER BY id DESC LIMIT 15", (active_repo,)

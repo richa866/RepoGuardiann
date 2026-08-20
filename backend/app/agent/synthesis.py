@@ -19,7 +19,7 @@ from app.agent.tool_schemas import GEMINI_TOOL_SCHEMAS
 from app.agent.tools import TOOL_REGISTRY
 from app.config import settings
 from app.db.database import get_conn, now_iso, tx
-from app.llm import synthesize_json
+from app.llm import short_error, synthesize_json
 
 logger = logging.getLogger("repoguardian.agent.synthesis")
 
@@ -81,7 +81,7 @@ def run_all_tools(repo: str, issue_number: int) -> dict:
         try:
             evidence[name] = fn(repo, issue_number)
         except Exception as exc:
-            logger.warning("Tool %s failed on %s#%s: %s", name, repo, issue_number, exc)
+            logger.warning("Tool %s failed on %s#%s: %s", name, repo, issue_number, short_error(exc))
             evidence[name] = {"error": str(exc)}
     return evidence
 
@@ -242,7 +242,7 @@ Investigate this issue using whichever tools are actually relevant, then give yo
                     # different issue than the one it was asked about.
                     result = fn(repo, issue_number, **call_kwargs)
                 except Exception as exc:
-                    logger.warning("Tool %s failed during real loop on %s#%s: %s", tool_name, repo, issue_number, exc)
+                    logger.warning("Tool %s failed during real loop on %s#%s: %s", tool_name, repo, issue_number, short_error(exc))
                     result = {"error": str(exc)}
 
             tool_calls.append({"tool": tool_name, "input": {"repo": repo, "issue_number": issue_number, **call_kwargs}, "output": result})
@@ -305,7 +305,7 @@ def evaluate_issue(repo: str, issue_number: int) -> dict:
     except Exception as exc:
         logger.info(
             "Real tool-use loop unavailable or failed for %s#%s (%s); falling back",
-            repo, issue_number, exc,
+            repo, issue_number, short_error(exc),
         )
         evidence = run_all_tools(repo, issue_number)
         try:
@@ -313,7 +313,7 @@ def evaluate_issue(repo: str, issue_number: int) -> dict:
         except Exception as exc2:
             logger.info(
                 "LLM synthesis on gathered evidence also failed (%s); using deterministic rule-based fallback",
-                exc2,
+                short_error(exc2),
             )
             decision = _rule_based_fallback(issue, evidence)
 
