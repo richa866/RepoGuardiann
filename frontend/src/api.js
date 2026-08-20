@@ -42,6 +42,7 @@ export const api = {
   connect: (repo, token) => callConnect(client.post("/connect", { repo, token: token || null })),
   syncStatus: (repo) => call(client.get("/sync/status", { params: repo ? { repo } : {} })),
   listRepos: () => call(client.get("/repos")),
+  switchRepo: (repo) => call(client.post("/repos/active", { repo })),
   sync: (repo) => call(client.post("/sync", null, { params: repo ? { repo } : {} })),
   listIssues: (params = {}) => call(client.get("/issues", { params })),
   getIssue: (number, repo) => call(client.get(`/issues/${number}`, { params: repo ? { repo } : {} })),

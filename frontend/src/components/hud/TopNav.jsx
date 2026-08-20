@@ -21,10 +21,13 @@ export function TopNav({
   onCheckNow,
   isChecking,
   onOpenConnect,
+  onSwitchRepo,
+  repos = [],
   issuesCount = 0,
   escalatedCount = 0,
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [repoDropdownOpen, setRepoDropdownOpen] = useState(false);
 
   const views = [
     { id: '3d', label: '3D Triage', icon: Layers },
@@ -47,19 +50,70 @@ export function TopNav({
             RepoGuardian
           </span>
           <span className="text-zinc-600 font-mono text-xs hidden xs:inline">/</span>
-          <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-0.5 sm:py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11px] sm:text-xs font-mono text-zinc-300 min-w-0">
-            <GitBranch className="w-3 h-3 text-zinc-400 shrink-0" />
-            <span className="font-medium text-white truncate max-w-[90px] sm:max-w-[180px]">
-              {health?.active_repo || 'No repo'}
-            </span>
-            <span className="text-zinc-600 hidden sm:inline">•</span>
-            <span className="text-zinc-400 hidden sm:inline">{issuesCount}</span>
-            {escalatedCount > 0 && (
-              <span className="text-white font-medium flex items-center gap-1 shrink-0 ml-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                <span className="text-zinc-300 hidden md:inline">{escalatedCount} escalated</span>
-                <span className="text-zinc-300 md:hidden">{escalatedCount}</span>
+          <div className="relative">
+            <button
+              onClick={() => setRepoDropdownOpen(!repoDropdownOpen)}
+              className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-0.5 sm:py-1 rounded-full bg-white/[0.04] hover:bg-white/10 border border-white/10 hover:border-white/25 text-[11px] sm:text-xs font-mono text-zinc-300 min-w-0 transition cursor-pointer"
+              title="Click to switch active repository"
+            >
+              <GitBranch className="w-3 h-3 text-sky-400 shrink-0" />
+              <span className="font-medium text-white truncate max-w-[90px] sm:max-w-[180px]">
+                {health?.active_repo || 'No repo'}
               </span>
+              <span className="text-zinc-600 hidden sm:inline">•</span>
+              <span className="text-zinc-400 hidden sm:inline">{issuesCount}</span>
+              {escalatedCount > 0 && (
+                <span className="text-white font-medium flex items-center gap-1 shrink-0 ml-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                  <span className="text-zinc-300 hidden md:inline">{escalatedCount}</span>
+                </span>
+              )}
+              <ChevronDown className="w-3 h-3 text-zinc-400 ml-0.5" />
+            </button>
+
+            {/* Repositories Dropdown */}
+            {repoDropdownOpen && (
+              <div className="absolute top-8 left-0 w-64 rounded-2xl bg-black/95 border border-white/15 shadow-2xl backdrop-blur-2xl p-2 flex flex-col gap-1 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-2.5 py-1 text-[10px] font-mono uppercase text-zinc-500 tracking-wider">
+                  Connected Repositories
+                </div>
+                {repos.map((r) => {
+                  const rName = typeof r === 'string' ? r : r.repo;
+                  const isActive = rName === health?.active_repo;
+                  return (
+                    <button
+                      key={rName}
+                      onClick={() => {
+                        if (onSwitchRepo) onSwitchRepo(rName);
+                        setRepoDropdownOpen(false);
+                      }}
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-mono text-left transition cursor-pointer ${
+                        isActive
+                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold'
+                          : 'text-zinc-300 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <GitBranch className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{rName}</span>
+                      </div>
+                      {isActive && <span className="text-[10px] text-sky-400 font-bold ml-1">ACTIVE</span>}
+                    </button>
+                  );
+                })}
+                <div className="border-t border-white/10 pt-1 mt-1">
+                  <button
+                    onClick={() => {
+                      setRepoDropdownOpen(false);
+                      if (onOpenConnect) onOpenConnect();
+                    }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-mono text-zinc-400 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Connect New Repository...</span>
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>

@@ -154,7 +154,7 @@ def list_issues(
     category: Optional[str] = Query(default=None, description="Filter by escalation category"),
     escalated: Optional[int] = Query(default=None, description="1 for escalated, 0 for non-escalated"),
     sort: Optional[str] = Query(default="updated_at desc", description="Sort order (e.g., 'updated_at desc', 'created_at desc', 'escalated_first')"),
-    limit: int = Query(default=25, ge=1, le=100),
+    limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ):
     """GET /issues

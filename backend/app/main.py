@@ -107,6 +107,20 @@ def list_repos():
     return {"repos": rows, "active_repo": get_active_repo()}
 
 
+class SwitchRepoIn(BaseModel):
+    repo: str
+
+
+@app.post("/repos/active", tags=["repos"])
+def set_active_repo_endpoint(body: SwitchRepoIn):
+    from app.db.database import set_active_repo, get_repo_row
+    row = get_repo_row(body.repo)
+    if not row:
+        raise HTTPException(404, f"Repository {body.repo} not found in database")
+    set_active_repo(body.repo)
+    return {"status": "ok", "active_repo": body.repo}
+
+
 @app.post("/sync", tags=["repos"])
 def sync_endpoint(repo: str | None = None):
     from app.github.fetch import run_sync

@@ -19,6 +19,7 @@ export default function App() {
   const [isWarpTransitioning, setIsWarpTransitioning] = useState(false);
 
   const [health, setHealth] = useState(null);
+  const [repos, setRepos] = useState([]);
   const [issues, setIssues] = useState([]);
   const [monitorStatus, setMonitorStatus] = useState(null);
   const [selectedIssue, setSelectedIssue] = useState(null);
@@ -36,12 +37,18 @@ export default function App() {
 
   // Load health, issues, and monitor loop status
   const refreshData = useCallback(async () => {
-    const { data: h } = await api.health();
+    const [{ data: h }, { data: repoRes }] = await Promise.all([
+      api.health(),
+      api.listRepos(),
+    ]);
+    if (repoRes?.repos) {
+      setRepos(repoRes.repos);
+    }
     if (h) {
       setHealth(h);
       if (h.active_repo) {
         const [{ data: issueRes }, { data: monRes }] = await Promise.all([
-          api.listIssues({ repo: h.active_repo, limit: 100 }),
+          api.listIssues({ repo: h.active_repo, limit: 500 }),
           api.monitorStatus(h.active_repo),
         ]);
         if (issueRes?.issues) {
@@ -119,8 +126,17 @@ export default function App() {
 
   const handleRepoConnected = (newRepo) => {
     showToast(`Connected to ${newRepo}!`);
+    setSelectedIssue(null);
     refreshData();
     setAppStage('branch_viz');
+  };
+
+  const handleSwitchRepo = async (newRepo) => {
+    setSelectedIssue(null);
+    showToast(`Switching to ${newRepo}...`);
+    await api.switchRepo(newRepo);
+    await refreshData();
+    showToast(`Switched active repository to ${newRepo}`);
   };
 
   const escalatedCount = issues.filter((i) => i.latest_escalate).length;
@@ -167,6 +183,8 @@ export default function App() {
       {/* Sleek Header Navigation */}
       <TopNav
         health={health}
+        repos={repos}
+        onSwitchRepo={handleSwitchRepo}
         activeView={activeView}
         onSelectView={setActiveView}
         onSync={handleSync}

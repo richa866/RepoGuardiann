@@ -299,8 +299,46 @@ const DEFAULT_SUBTYPE_SEEDS = {
 
 export const FILTER_KEYS = ['all', 'security_urgent', 'regression', 'contentious', 'duplicates', 'needs_info'];
 
-export function matchesCategory(cats = [], clusterKey) {
-  if (!Array.isArray(cats)) return false;
+export function deriveIssueCategories(issue) {
+  if (!issue) return [];
+  const existing = issue.latest_categories || issue.categories || [];
+  if (Array.isArray(existing) && existing.length > 0) {
+    return existing;
+  }
+  if (typeof issue.category === 'string' && issue.category) {
+    return [issue.category];
+  }
+  
+  const derived = [];
+  const labels = Array.isArray(issue.labels) 
+    ? issue.labels.map(l => (typeof l === 'string' ? l : l.name || '')).join(' ').toLowerCase() 
+    : '';
+  const text = `${issue.title || ''} ${issue.body || ''} ${labels}`.toLowerCase();
+
+  if (/cve-|security|vulnerability|rce|arbitrary code|sql injection|xss|path traversal|secret leak|credential|auth bypass|overflow/.test(text)) {
+    derived.push('security-sensitive', 'urgent');
+  }
+  if (/regression|broke|broken after|backward compatibility|since v\d|broke in/.test(text)) {
+    derived.push('possible-regression');
+  }
+  if (/contentious|disagree|wontfix|won't fix|breaking change|deprecat|revert|pushback/.test(text) || (issue.comments_count && issue.comments_count >= 8)) {
+    derived.push('contentious');
+  }
+  if (/duplicate of|closed as duplicate|duplicate|dup of/.test(text)) {
+    derived.push('likely-duplicate');
+  }
+  if (/needs info|needs-info|needs reproduction|more info|repro needed|steps to reproduce|unreproducible|question/.test(text)) {
+    derived.push('needs-more-info');
+  }
+
+  return derived;
+}
+
+export function matchesCategory(catsOrIssue = [], clusterKey) {
+  const cats = Array.isArray(catsOrIssue)
+    ? (catsOrIssue.length > 0 ? catsOrIssue : [])
+    : deriveIssueCategories(catsOrIssue);
+
   if (clusterKey === 'security_urgent') {
     return cats.includes('security-sensitive') || cats.includes('urgent');
   }
@@ -651,23 +689,21 @@ function SceneContent({
 
     if (activeFilter !== 'all') {
       issues.forEach((issue) => {
-        const cats = issue.latest_categories || [];
-        if (matchesCategory(cats, activeFilter)) {
+        if (matchesCategory(issue, activeFilter)) {
           clusterMap[activeFilter].push(issue);
         }
       });
     } else {
       issues.forEach((issue) => {
-        const cats = issue.latest_categories || [];
-        if (matchesCategory(cats, 'security_urgent')) {
+        if (matchesCategory(issue, 'security_urgent')) {
           clusterMap.security_urgent.push(issue);
-        } else if (matchesCategory(cats, 'regression')) {
+        } else if (matchesCategory(issue, 'regression')) {
           clusterMap.regression.push(issue);
-        } else if (matchesCategory(cats, 'contentious')) {
+        } else if (matchesCategory(issue, 'contentious')) {
           clusterMap.contentious.push(issue);
-        } else if (matchesCategory(cats, 'duplicates')) {
+        } else if (matchesCategory(issue, 'duplicates')) {
           clusterMap.duplicates.push(issue);
-        } else if (matchesCategory(cats, 'needs_info')) {
+        } else if (matchesCategory(issue, 'needs_info')) {
           clusterMap.needs_info.push(issue);
         } else {
           clusterMap.normal.push(issue);
@@ -685,7 +721,7 @@ function SceneContent({
       const totalCount = allClusterIssues.length;
 
       if (totalCount > 0) {
-        const visibleIssues = allClusterIssues.slice(0, 16);
+        const visibleIssues = allClusterIssues.slice(0, 32);
         const clusterCfg = CLUSTERS[activeFilter];
 
         const { positions, connections: shapeConns } = getConstellationFormation(visibleIssues.length);
@@ -735,18 +771,21 @@ function SceneContent({
         const totalCount = allClusterIssues.length;
 
         if (totalCount > 0) {
-          const visibleIssues = allClusterIssues.slice(0, 10);
+          const maxVisible = clusterKey === 'normal' ? 36 : 18;
+          const visibleIssues = allClusterIssues.slice(0, maxVisible);
           const cCenter = clusterCfg.center;
           const clusterNodes = [];
 
           visibleIssues.forEach((issue, idx) => {
-            const count = visibleIssues.length;
-            const radius = count > 1 ? 3.8 + (idx * 1.2) : 0.0;
-            const angle = (idx / Math.max(1, count)) * Math.PI * 2 + 0.35;
+            const ring = Math.floor(idx / 8);
+            const ringIdx = idx % 8;
+            const ringCount = Math.min(8, visibleIssues.length - ring * 8);
+            const radius = ring === 0 ? 3.4 : 3.4 + ring * 2.2;
+            const angle = (ringIdx / Math.max(1, ringCount)) * Math.PI * 2 + ring * 0.45;
 
             const pos = [
               cCenter[0] + Math.cos(angle) * radius,
-              cCenter[1] + (Math.sin(idx * 2.5) * 0.8),
+              cCenter[1] + (Math.sin(idx * 2.5 + ring) * 0.9),
               cCenter[2] + Math.sin(angle) * radius,
             ];
 
@@ -757,7 +796,7 @@ function SceneContent({
             nodes.push({ issue, position: pos, clusterKey });
             clusterNodes.push(pos);
 
-            if (idx > 0) {
+            if (idx > 0 && ringIdx > 0) {
               conns.push({
                 p1: nodes[nodes.length - 2].position,
                 p2: pos,
@@ -920,45 +959,16 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
   const [isAutoRotating, setIsAutoRotating] = useState(false);
   const [viewPreset, setViewPreset] = useState('3d');
 
-  // Guarantee initial 3 nodes per sub-type at baseline, but NEVER re-add overridden issues
+  // Use real repository issues when available, fallback to demo seeds only if repository has 0 issues
   const baselineIssues = useMemo(() => {
-    const byCategory = {
-      security_urgent: [],
-      regression: [],
-      contentious: [],
-      duplicates: [],
-      needs_info: [],
-      normal: [],
-    };
-
-    issues.forEach((issue) => {
-      const cats = issue.latest_categories || [];
-      let placed = false;
-      if (matchesCategory(cats, 'security_urgent')) { byCategory.security_urgent.push(issue); placed = true; }
-      if (matchesCategory(cats, 'regression')) { byCategory.regression.push(issue); placed = true; }
-      if (matchesCategory(cats, 'contentious')) { byCategory.contentious.push(issue); placed = true; }
-      if (matchesCategory(cats, 'duplicates')) { byCategory.duplicates.push(issue); placed = true; }
-      if (matchesCategory(cats, 'needs_info')) { byCategory.needs_info.push(issue); placed = true; }
-      if (!placed) { byCategory.normal.push(issue); }
-    });
-
-    const finalIssues = [...issues];
-    const existingNumbers = new Set(issues.map((i) => i.number));
-
-    Object.entries(DEFAULT_SUBTYPE_SEEDS).forEach(([catKey, seeds]) => {
-      const currentCount = byCategory[catKey].length;
-      if (currentCount < 3) {
-        const needed = 3 - currentCount;
-        seeds.slice(0, needed).forEach((seed) => {
-          if (!existingNumbers.has(seed.number)) {
-            finalIssues.push(seed);
-            existingNumbers.add(seed.number);
-          }
-        });
-      }
-    });
-
-    return finalIssues;
+    if (!issues || issues.length === 0) {
+      const seedList = [];
+      Object.values(DEFAULT_SUBTYPE_SEEDS).forEach((seeds) => {
+        seedList.push(...seeds);
+      });
+      return seedList;
+    }
+    return issues;
   }, [issues]);
 
   // Exclude overridden issues so the constellation genuinely shrinks and readjusts
@@ -969,7 +979,7 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
   // Filter issues for sequential stepping
   const visibleIssues = useMemo(() => {
     if (activeFilter === 'all') return augmentedIssues;
-    return augmentedIssues.filter((i) => matchesCategory(i.latest_categories || [], activeFilter));
+    return augmentedIssues.filter((i) => matchesCategory(i, activeFilter));
   }, [augmentedIssues, activeFilter]);
 
   const currentIndex = useMemo(() => {
@@ -989,12 +999,11 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
       needs_info: 0,
     };
     augmentedIssues.forEach((i) => {
-      const cats = i.latest_categories || [];
-      if (matchesCategory(cats, 'security_urgent')) map.security_urgent++;
-      if (matchesCategory(cats, 'regression')) map.regression++;
-      if (matchesCategory(cats, 'contentious')) map.contentious++;
-      if (matchesCategory(cats, 'duplicates')) map.duplicates++;
-      if (matchesCategory(cats, 'needs_info')) map.needs_info++;
+      if (matchesCategory(i, 'security_urgent')) map.security_urgent++;
+      if (matchesCategory(i, 'regression')) map.regression++;
+      if (matchesCategory(i, 'contentious')) map.contentious++;
+      if (matchesCategory(i, 'duplicates')) map.duplicates++;
+      if (matchesCategory(i, 'needs_info')) map.needs_info++;
     });
     return map;
   }, [augmentedIssues]);

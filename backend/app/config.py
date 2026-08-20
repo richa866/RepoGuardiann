@@ -54,10 +54,10 @@ class Settings:
         default_factory=lambda: int(_env("POLL_INTERVAL_SECONDS") or _env("MONITOR_POLL_INTERVAL_SECONDS", "90"))
     )
     connect_sync_max_items: int = field(
-        default_factory=lambda: int(_env("CONNECT_SYNC_MAX_ITEMS", "30"))
+        default_factory=lambda: int(_env("CONNECT_SYNC_MAX_ITEMS", "300"))
     )
     full_sync_max_items: int = field(
-        default_factory=lambda: int(_env("FULL_SYNC_MAX_ITEMS", "300"))
+        default_factory=lambda: int(_env("FULL_SYNC_MAX_ITEMS", "500"))
     )
     database_path: str = field(default_factory=lambda: _env("DB_PATH") or _env("DATABASE_PATH", "./data/repoguardian.db"))
     chroma_path: str = field(default_factory=lambda: _env("CHROMA_PATH", "./data/chromadb"))
