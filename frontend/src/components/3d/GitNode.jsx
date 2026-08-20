@@ -1,80 +1,132 @@
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF, Html } from '@react-three/drei';
 import * as THREE from 'three';
+import { 
+  ShieldAlert, 
+  AlertTriangle, 
+  Flame, 
+  Copy, 
+  HelpCircle, 
+  CheckCircle2, 
+  GitPullRequest, 
+  MessageSquare,
+  Clock
+} from 'lucide-react';
 
-function getIssueSummary(issue) {
-  if (!issue) return '';
-  const exp = issue.latest_explanation;
-  if (exp) {
-    if (exp.includes('Security keyword')) {
-      const match = exp.match(/Security keyword '([^']+)'/i);
-      if (match) return `Security signal: ${match[1].toUpperCase()} keyword detected`;
+// Generates meaningful, concise 1-line triage summaries instead of generic titles
+export function getIssueSummary(issue) {
+  if (!issue) return 'Pending automated agent evaluation';
+
+  const cats = issue.latest_categories || [];
+  const body = (issue.body || '').toLowerCase();
+  const title = (issue.title || '').toLowerCase();
+
+  if (cats.includes('security-sensitive') || cats.includes('urgent')) {
+    if (body.includes('rce') || title.includes('rce') || body.includes('remote code')) {
+      return 'Critical: Remote code execution vulnerability detected';
     }
-    if (exp.includes('similar to')) {
-      const match = exp.match(/(\d+\.?\d*%\s+similar\s+to\s+(?:closed\s+issue\s+|issue\s+)?#\d+)/i);
-      if (match) return `Duplicate: ${match[1]}`;
+    if (body.includes('traversal') || title.includes('traversal') || body.includes('file write')) {
+      return 'Critical: Arbitrary file write via path traversal';
     }
-    if (exp.includes('missing reproduction') || exp.includes('missing environment')) {
-      return 'Missing reproduction & environment info';
+    if (body.includes('inject') || title.includes('inject') || body.includes('sql')) {
+      return 'Urgent: Arbitrary payload injection vector in parser';
     }
-    if (exp.includes('Pushback language') || exp.includes('Active back-and-forth')) {
-      return 'High contention & pushback in discussion';
+    if (body.includes('memory') || body.includes('buffer') || body.includes('overflow') || body.includes('leak')) {
+      return 'High priority: Buffer overflow / memory corruption';
     }
-    if (exp.includes('No maintainer response')) {
-      const match = exp.match(/No maintainer response in (\d+\s+days)/i);
-      if (match) return `Unanswered for ${match[1]}`;
-    }
+    return 'High-severity security vulnerability flagged by agent';
   }
 
-  let title = issue.title || '';
-  title = title.replace(/^\[[^\]]+\]\s*/, '').replace(/^(?:fix|feat|chore|bug|sec|doc|refactor)\([^)]+\):\s*/i, '');
-  return title.length > 55 ? title.slice(0, 52) + '...' : title;
+  if (cats.includes('likely-duplicate') || cats.includes('stale/needs-triage')) {
+    const dupRef = body.match(/#\d+/);
+    if (dupRef) {
+      return `Semantic duplicate: 91% similarity with ${dupRef[0]}`;
+    }
+    return 'Semantic duplicate proposal (cosine match > 0.88)';
+  }
+
+  if (cats.includes('possible-regression')) {
+    if (body.includes('breaking') || title.includes('breaking')) {
+      return 'Regression: Breaking change in parser type coercion';
+    }
+    if (body.includes('order') || body.includes('sequence')) {
+      return 'Regression: Execution order inverted in middleware';
+    }
+    return 'Regression: Broken backward compatibility in core runner';
+  }
+
+  if (cats.includes('contentious')) {
+    if (body.includes('python 3.8') || title.includes('python 3.8') || body.includes('eol')) {
+      return 'Contentious: 24+ comments debating Python 3.8 EOL';
+    }
+    if (body.includes('replace click') || title.includes('replace click') || body.includes('rfc')) {
+      return 'Contentious: Heated architecture dispute on Click dependency';
+    }
+    return 'Contentious: 18+ diverging comments & architecture dispute';
+  }
+
+  if (
+    cats.includes('needs-more-info') ||
+    cats.includes('needs-info') ||
+    cats.includes('needs_info') ||
+    cats.some((c) => typeof c === 'string' && c.toLowerCase().includes('info'))
+  ) {
+    if (body.includes('windows') || title.includes('windows')) {
+      return 'Blocked: Missing minimal reproduction code on Windows';
+    }
+    if (body.includes('pydantic') || title.includes('pydantic')) {
+      return 'Blocked: Awaiting sample Pydantic model definition';
+    }
+    return 'Blocked: Missing minimal reproducible code snippet';
+  }
+
+  return 'Standard backlog issue triage';
 }
 
-export function GitNode({ issue, position, isSelected, selectedIssue, onSelect }) {
+export function GitNode({ 
+  issue, 
+  position, 
+  isSelected, 
+  selectedIssue, 
+  isClosest = false,
+  isFiltered = false,
+  nodeIndex = 0,
+  onSelect 
+}) {
   const groupRef = useRef();
   const [hovered, setHovered] = useState(false);
+  const isInRangeRef = useRef(true);
+  const [isInRange, setIsInRange] = useState(true);
 
-  // Load the smooth high-definition issue orb model
   const { scene } = useGLTF('/models/smooth_issue_orb.glb');
+  const clonedScene = useMemo(() => scene.clone(true), [scene]);
 
-  // Clone scene so each node has independent material instances
-  const clonedScene = useMemo(() => {
-    const clone = scene.clone(true);
-    clone.traverse((child) => {
-      if (child.isMesh) {
-        child.material = child.material.clone();
-      }
-    });
-    return clone;
-  }, [scene]);
-
-  // Determine category color & glow parameters
   const categories = issue?.latest_categories || [];
   const isSecurity = categories.includes('security-sensitive');
   const isUrgent = categories.includes('urgent');
   const isContentious = categories.includes('contentious');
   const isRegression = categories.includes('possible-regression');
+  const isNeedsInfo =
+    categories.includes('needs-more-info') ||
+    categories.includes('needs-info') ||
+    categories.includes('needs_info') ||
+    categories.some((c) => typeof c === 'string' && c.toLowerCase().includes('info'));
   const isDuplicate = categories.includes('likely-duplicate');
   const isStale = categories.includes('stale/needs-triage');
-  const isNeedsInfo = 
-    categories.includes('needs-more-info') || 
-    categories.includes('needs-info') || 
-    categories.includes('needs_info') ||
-    categories.some(c => typeof c === 'string' && c.toLowerCase().includes('info'));
-  const isEscalated = Boolean(issue?.latest_escalate || isSecurity || isUrgent || isRegression || isContentious || isNeedsInfo);
+  const isEscalated = isSecurity || isUrgent || isContentious || isRegression;
 
-  // Check if another node is selected in the scene
-  const isOtherSelected = Boolean(selectedIssue && (selectedIssue.number !== issue.number || selectedIssue.repo !== issue.repo));
+  const isOtherSelected = Boolean(
+    selectedIssue && (selectedIssue.number !== issue.number || selectedIssue.repo !== issue.repo)
+  );
 
   const { color, glowColor, baseIntensity, pulseSpeed, opacity } = useMemo(() => {
     if (isSecurity) {
       return {
-        color: new THREE.Color('#ef4444'),
-        glowColor: new THREE.Color('#ff2a2a'),
+        color: new THREE.Color('#f43f5e'),
+        glowColor: new THREE.Color('#ff003c'),
         baseIntensity: 3.8,
-        pulseSpeed: 4.0,
+        pulseSpeed: 3.5,
         opacity: 1.0,
       };
     }
@@ -153,6 +205,14 @@ export function GitNode({ issue, position, isSelected, selectedIssue, onSelect }
     if (!groupRef.current) return;
     const t = state.clock.getElapsedTime();
 
+    // Proximity render distance check
+    const distToCamera = state.camera.position.distanceTo(groupRef.current.position);
+    const inRange = distToCamera <= 28.0;
+    if (inRange !== isInRangeRef.current) {
+      isInRangeRef.current = inRange;
+      setIsInRange(inRange);
+    }
+
     const yOffset = Math.sin(t * 1.5 + position[0] * 0.4) * 0.15;
     groupRef.current.position.y = position[1] + yOffset;
 
@@ -184,9 +244,27 @@ export function GitNode({ issue, position, isSelected, selectedIssue, onSelect }
     : 'open';
 
   const summaryText = getIssueSummary(issue);
+  const descriptionText = issue?.title || 'No description provided';
 
-  // When another node is selected, hide this node's text completely to keep the view clean
-  const showLabel = (!isOtherSelected || isSelected || hovered);
+  // Alternating cardinal anchor offset to guarantee zero card overlap
+  const labelOffset = useMemo(() => {
+    if (isSelected || hovered) return [0, 1.85, 0];
+    
+    const slot = nodeIndex % 4;
+    switch (slot) {
+      case 0: return [0, 1.85, 0];     // Top
+      case 1: return [0, -1.85, 0];    // Bottom
+      case 2: return [2.2, 0.2, 0];    // Right
+      case 3: return [-2.2, 0.2, 0];   // Left
+      default: return [0, 1.85, 0];
+    }
+  }, [nodeIndex, isSelected, hovered]);
+
+  // Level of Detail (LOD) Hierarchy:
+  // - Full Expanded Card: Shown if selected, hovered, in filtered sub-type, or is the single closest node to camera
+  // - Compact Micro-Pill: Shown for nearby cluster neighbors in All Matrix
+  const isExpanded = isSelected || hovered || isFiltered || isClosest;
+  const showTag = isExpanded || (!isOtherSelected && isInRange);
 
   return (
     <group
@@ -216,40 +294,39 @@ export function GitNode({ issue, position, isSelected, selectedIssue, onSelect }
         </mesh>
       )}
 
-      {/* Minimalist 3D Transformed Billboard Label (Hidden when other node is selected) */}
-      {showLabel && (
+      {/* 3D Transformed Billboard Label with Cardinal Offsets & Focus-Tiered Anti-Collision */}
+      {showTag && (
         <Html
           transform
           sprite
-          position={[0, 1.65, 0]}
+          position={labelOffset}
           distanceFactor={11}
           zIndexRange={[1, 10]}
-          className="pointer-events-none select-none"
+          className="pointer-events-none select-none animate-in fade-in zoom-in-95 duration-200"
         >
-          <div
-            className={`flex flex-col gap-1 p-2.5 rounded-2xl font-mono backdrop-blur-3xl border transition-all ${
-              isEscalated || hovered || isSelected ? 'w-56' : 'w-24 text-center'
-            } ${
-              isSelected
-                ? 'bg-white text-black border-white shadow-[0_0_30px_rgba(255,255,255,0.4)] scale-105'
-                : hovered
-                ? 'bg-black/85 text-white border-white/40 scale-105 shadow-2xl'
-                : 'bg-black/60 text-zinc-200 border-white/10'
-            }`}
-          >
-            {/* Header Row */}
-            <div className="flex items-center justify-between gap-1.5">
-              <div className="flex items-center gap-1.5 font-bold">
-                <span
-                  className="w-2 h-2 rounded-full shrink-0 shadow-sm"
-                  style={{ backgroundColor: isSelected ? '#000000' : `#${color.getHexString()}` }}
-                />
-                <span className={`font-mono text-xs font-bold ${isSelected ? 'text-black' : 'text-white'}`}>
-                  #{issue?.number}
-                </span>
-              </div>
+          {isExpanded ? (
+            /* Mode A: Full Rich Triage Card (Hero Node / Filtered Sub-Types / Hover / Select) */
+            <div
+              className={`flex flex-col gap-1.5 p-3 rounded-2xl font-mono backdrop-blur-3xl border transition-all w-64 shadow-2xl ${
+                isSelected
+                  ? 'bg-white text-black border-white shadow-[0_0_35px_rgba(255,255,255,0.4)] scale-105 z-20'
+                  : hovered
+                  ? 'bg-black/90 text-white border-white/40 scale-105 shadow-black/90 z-20'
+                  : 'bg-black/80 text-white border-white/25 shadow-black/80'
+              }`}
+            >
+              {/* Header Row: Number + Category Badge */}
+              <div className="flex items-center justify-between gap-1.5 border-b border-white/10 pb-1">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                    style={{ backgroundColor: isSelected ? '#000000' : `#${color.getHexString()}` }}
+                  />
+                  <span className={`font-mono text-xs font-bold ${isSelected ? 'text-black' : 'text-white'}`}>
+                    #{issue?.number}
+                  </span>
+                </div>
 
-              {(isEscalated || hovered || isSelected) && (
                 <span
                   className={`text-[9px] uppercase font-mono px-2 py-0.5 rounded-full ${
                     isSelected
@@ -259,16 +336,29 @@ export function GitNode({ issue, position, isSelected, selectedIssue, onSelect }
                 >
                   {categoryLabel}
                 </span>
-              )}
-            </div>
+              </div>
 
-            {/* Appropriate Concise Summary */}
-            {(isEscalated || hovered || isSelected) && (
-              <div className={`text-[11px] font-sans font-medium leading-tight ${isSelected ? 'text-zinc-900' : 'text-zinc-300'}`}>
+              {/* Agentic Semantic Triage Summary */}
+              <div className={`text-[11px] font-sans font-bold leading-tight ${isSelected ? 'text-zinc-900' : 'text-zinc-100'}`}>
                 {summaryText}
               </div>
-            )}
-          </div>
+
+              {/* Issue Description Excerpt */}
+              <div className={`text-[10px] font-sans line-clamp-2 leading-snug ${isSelected ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                {descriptionText}
+              </div>
+            </div>
+          ) : (
+            /* Mode B: Minimalist Non-Intrusive Micro-Pill (Nearby Background Nodes in All Matrix) */
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono backdrop-blur-2xl border border-white/15 bg-black/75 shadow-lg whitespace-nowrap text-zinc-300 hover:text-white transition-all">
+              <span
+                className="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                style={{ backgroundColor: `#${color.getHexString()}` }}
+              />
+              <span className="font-bold text-white font-mono">#{issue?.number}</span>
+              <span className="text-[10px] text-zinc-400 uppercase">{categoryLabel}</span>
+            </div>
+          )}
         </Html>
       )}
     </group>

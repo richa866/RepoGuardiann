@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Html, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
@@ -11,26 +11,28 @@ import {
   GitMerge,
   User,
   Clock,
+  RotateCcw,
+  Play,
+  Pause,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 // Structured Hierarchical Git Tree Definition
 const TREE_DATA = {
   branches: [
     {
-      id: 'main',
-      name: 'main',
-      label: 'Trunk (Production)',
-      color: '#38bdf8',
-      glow: '#0284c7',
-      y: 0,
-      z: 0,
+      id: 'hotfix',
+      name: 'hotfix/terminal-escape',
+      label: 'Security Patch Branch',
+      color: '#f43f5e',
+      glow: '#e11d48',
+      y: 5.4,
+      z: -1.5,
+      forkFrom: { branch: 'release', commitId: 'r2' },
+      mergeInto: { branch: 'release', commitId: 'r3' },
       commits: [
-        { id: 'm1', hash: '8f2a1b', msg: 'chore: initial repository setup', author: 'maintainer1', time: '5d ago', x: -10 },
-        { id: 'm2', hash: '3e9c4d', msg: 'feat(core): setup SQLite & models', author: 'maintainer1', time: '4d ago', x: -6 },
-        { id: 'm3', hash: '5b1a8f', msg: 'feat(rag): Chroma embeddings vector index', author: 'maintainer1', time: '3d ago', x: -2 },
-        { id: 'm4', hash: '7c2e9a', msg: 'merge: feature/auth-sessions into main', author: 'maintainer1', time: '2d ago', x: 2, isMerge: true },
-        { id: 'm5', hash: '9d4f1b', msg: 'feat(agent): multi-step evaluation tools', author: 'maintainer1', time: '1d ago', x: 6 },
-        { id: 'm6', hash: '1a8b3c', msg: 'merge: release/v2.1 into main', author: 'maintainer1', time: '4h ago', x: 10, isMerge: true },
+        { id: 'h1', hash: 'ee11aa', msg: 'sec(parser): strip ANSI escape sequences', author: 'security-lead', time: '2d ago', x: 2.0 },
       ],
     },
     {
@@ -51,6 +53,23 @@ const TREE_DATA = {
       ],
     },
     {
+      id: 'main',
+      name: 'main',
+      label: 'Trunk (Production)',
+      color: '#38bdf8',
+      glow: '#0284c7',
+      y: 0,
+      z: 0,
+      commits: [
+        { id: 'm1', hash: '8f2a1b', msg: 'chore: initial repository setup', author: 'maintainer1', time: '5d ago', x: -10 },
+        { id: 'm2', hash: '3e9c4d', msg: 'feat(core): setup SQLite & models', author: 'maintainer1', time: '4d ago', x: -6 },
+        { id: 'm3', hash: '5b1a8f', msg: 'feat(rag): Chroma embeddings vector index', author: 'maintainer1', time: '3d ago', x: -2 },
+        { id: 'm4', hash: '7c2e9a', msg: 'merge: feature/auth-sessions into main', author: 'maintainer1', time: '2d ago', x: 2, isMerge: true },
+        { id: 'm5', hash: '9d4f1b', msg: 'feat(agent): multi-step evaluation tools', author: 'maintainer1', time: '1d ago', x: 6 },
+        { id: 'm6', hash: '1a8b3c', msg: 'merge: release/v2.1 into main', author: 'maintainer1', time: '4h ago', x: 10, isMerge: true },
+      ],
+    },
+    {
       id: 'feature-auth',
       name: 'feature/auth-sessions',
       label: 'Security & Auth Subsystem',
@@ -67,27 +86,13 @@ const TREE_DATA = {
       ],
     },
     {
-      id: 'hotfix',
-      name: 'hotfix/terminal-escape',
-      label: 'Security Patch Branch',
-      color: '#f43f5e',
-      glow: '#e11d48',
-      y: 5.4,
-      z: -1.5,
-      forkFrom: { branch: 'release', commitId: 'r2' },
-      mergeInto: { branch: 'release', commitId: 'r3' },
-      commits: [
-        { id: 'h1', hash: 'ee11aa', msg: 'sec(parser): strip ANSI escape sequences', author: 'security-lead', time: '2d ago', x: 2.0 },
-      ],
-    },
-    {
       id: 'feature-rag',
       name: 'feature/rag-pipeline',
       label: 'Knowledge Engine',
       color: '#f59e0b',
       glow: '#d97706',
-      y: -5.2,
-      z: -2.0,
+      y: -5.4,
+      z: -1.5,
       forkFrom: { branch: 'main', commitId: 'm3' },
       commits: [
         { id: 'rag1', hash: '44dd22', msg: 'feat(rag): chunking and cosine distance', author: 'dave', time: '2d ago', x: 1.0 },
@@ -97,11 +102,11 @@ const TREE_DATA = {
   ],
 };
 
-// Smooth Camera Controller for Git Tree
-function SmoothBranchCameraController({ selectedCommit, selectedBranch, isUserInteracting, controlsRef }) {
-  const { camera } = useThree();
+// Dynamic Camera Controller that auto-frames any tree size perfectly in the center
+function SmoothBranchCameraController({ selectedCommit, selectedBranch, resetTrigger, autoFrameConfig, isUserInteracting, controlsRef }) {
+  const { camera, size } = useThree();
   const targetLookAt = useRef(new THREE.Vector3(0, 0, 0));
-  const targetCamPos = useRef(new THREE.Vector3(0, 2, 22));
+  const targetCamPos = useRef(new THREE.Vector3(0, 0, 24));
   const animating = useRef(false);
   const animationFrames = useRef(0);
 
@@ -109,19 +114,20 @@ function SmoothBranchCameraController({ selectedCommit, selectedBranch, isUserIn
     if (selectedCommit && selectedBranch) {
       targetLookAt.current.set(selectedCommit.x, selectedBranch.y, selectedBranch.z);
       targetCamPos.current.set(
-        selectedCommit.x,
+        selectedCommit.x + 1.0,
         selectedBranch.y + 0.8,
         selectedBranch.z + 8.5
       );
       animating.current = true;
-      animationFrames.current = 45;
-    } else {
-      targetLookAt.current.set(0, 0, 0);
-      targetCamPos.current.set(0, 2, 22);
+      animationFrames.current = 50;
+    } else if (autoFrameConfig) {
+      const { center, distance } = autoFrameConfig;
+      targetLookAt.current.set(center[0], center[1], center[2]);
+      targetCamPos.current.set(center[0], center[1] + 0.5, center[2] + distance);
       animating.current = true;
-      animationFrames.current = 45;
+      animationFrames.current = 50;
     }
-  }, [selectedCommit, selectedBranch]);
+  }, [selectedCommit, selectedBranch, resetTrigger, autoFrameConfig, size.width, size.height]);
 
   useFrame(() => {
     if (isUserInteracting.current) {
@@ -131,9 +137,9 @@ function SmoothBranchCameraController({ selectedCommit, selectedBranch, isUserIn
 
     if (animating.current && animationFrames.current > 0) {
       if (controlsRef.current) {
-        controlsRef.current.target.lerp(targetLookAt.current, 0.08);
+        controlsRef.current.target.lerp(targetLookAt.current, 0.07);
       }
-      camera.position.lerp(targetCamPos.current, 0.08);
+      camera.position.lerp(targetCamPos.current, 0.07);
       animationFrames.current--;
       if (animationFrames.current <= 0) {
         animating.current = false;
@@ -144,7 +150,7 @@ function SmoothBranchCameraController({ selectedCommit, selectedBranch, isUserIn
   return null;
 }
 
-function CrystalCommitNode({ commit, branch, isSelected, onSelect }) {
+function CrystalCommitNode({ commit, branch, isSelected, selectedCommit, onSelect }) {
   const meshRef = useRef();
   const [hovered, setHovered] = useState(false);
   const { scene } = useGLTF('/models/git_branch_node.glb');
@@ -176,6 +182,9 @@ function CrystalCommitNode({ commit, branch, isSelected, onSelect }) {
     meshRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
   });
 
+  const isOtherSelected = Boolean(selectedCommit && selectedCommit.id !== commit.id);
+  const showLabel = !isOtherSelected || isSelected || hovered;
+
   return (
     <group
       ref={meshRef}
@@ -203,37 +212,39 @@ function CrystalCommitNode({ commit, branch, isSelected, onSelect }) {
         </mesh>
       )}
 
-      <Html
-        transform
-        sprite
-        position={[0, 1.4, 0]}
-        distanceFactor={10}
-        zIndexRange={[1, 10]}
-        className="pointer-events-none select-none"
-      >
-        <div
-          className={`flex flex-col gap-0.5 px-2.5 py-1 rounded-xl text-xs font-mono backdrop-blur-xl border shadow-xl transition-all max-w-[160px] ${
-            isSelected
-              ? 'bg-sky-950/95 text-white border-sky-400 scale-105 shadow-sky-500/40'
-              : hovered
-              ? 'bg-slate-900/95 text-white border-slate-400 scale-105 shadow-black/80'
-              : 'bg-slate-950/75 text-slate-300 border-white/10 opacity-85'
-          }`}
+      {showLabel && (
+        <Html
+          transform
+          sprite
+          position={[0, 1.4, 0]}
+          distanceFactor={10}
+          zIndexRange={[1, 10]}
+          className="pointer-events-none select-none"
         >
-          <div className="flex items-center gap-1.5 font-bold">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: branch.color }} />
-            <span style={{ color: branch.color }}>{commit.hash}</span>
-            {commit.isMerge && (
-              <span className="text-[9px] uppercase px-1 rounded bg-white/10 text-white flex items-center gap-0.5">
-                <GitMerge className="w-2.5 h-2.5" /> merge
-              </span>
-            )}
+          <div
+            className={`flex flex-col gap-0.5 px-2.5 py-1 rounded-xl text-xs font-mono backdrop-blur-xl border shadow-xl transition-all max-w-[160px] ${
+              isSelected
+                ? 'bg-sky-950/95 text-white border-sky-400 scale-105 shadow-sky-500/40'
+                : hovered
+                ? 'bg-slate-900/95 text-white border-slate-400 scale-105 shadow-black/80'
+                : 'bg-slate-950/75 text-slate-300 border-white/10 opacity-85'
+            }`}
+          >
+            <div className="flex items-center gap-1.5 font-bold">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: branch.color }} />
+              <span style={{ color: branch.color }}>{commit.hash}</span>
+              {commit.isMerge && (
+                <span className="text-[9px] uppercase px-1 rounded bg-white/10 text-white flex items-center gap-0.5">
+                  <GitMerge className="w-2.5 h-2.5" /> merge
+                </span>
+              )}
+            </div>
+            <span className="text-[11px] text-slate-300 truncate">
+              {commit.msg}
+            </span>
           </div>
-          <span className="text-[11px] text-slate-300 truncate">
-            {commit.msg}
-          </span>
-        </div>
-      </Html>
+        </Html>
+      )}
     </group>
   );
 }
@@ -253,11 +264,18 @@ function TreeBranchConnections({ branches = [] }) {
     const list = [];
 
     branches.forEach((b) => {
+      if (b.commits.length > 0) {
+        const pTag = new THREE.Vector3(-15.5, b.y, b.z);
+        const pFirst = new THREE.Vector3(b.commits[0].x, b.y, b.z);
+        const guideCurve = new THREE.LineCurve3(pTag, pFirst);
+        list.push({ curve: guideCurve, color: b.color, isGuide: true });
+      }
+
       for (let i = 0; i < b.commits.length - 1; i++) {
         const p1 = new THREE.Vector3(b.commits[i].x, b.y, b.z);
         const p2 = new THREE.Vector3(b.commits[i + 1].x, b.y, b.z);
         const curve = new THREE.LineCurve3(p1, p2);
-        list.push({ curve, color: b.color });
+        list.push({ curve, color: b.color, isGuide: false });
       }
 
       if (b.forkFrom && b.commits.length > 0) {
@@ -267,7 +285,7 @@ function TreeBranchConnections({ branches = [] }) {
           const p2 = new THREE.Vector3(b.commits[0].x, b.y, b.z);
           const mid = new THREE.Vector3(parent.x + 1.2, b.y * 0.6 + parent.branchY * 0.4, b.z * 0.6 + parent.branchZ * 0.4);
           const curve = new THREE.QuadraticBezierCurve3(p1, mid, p2);
-          list.push({ curve, color: b.color });
+          list.push({ curve, color: b.color, isGuide: false });
         }
       }
 
@@ -279,7 +297,7 @@ function TreeBranchConnections({ branches = [] }) {
           const p2 = new THREE.Vector3(target.x, target.branchY, target.branchZ);
           const mid = new THREE.Vector3(lastCommit.x + 1.5, b.y * 0.4 + target.branchY * 0.6, b.z * 0.4 + target.branchZ * 0.6);
           const curve = new THREE.QuadraticBezierCurve3(p1, mid, p2);
-          list.push({ curve, color: b.color });
+          list.push({ curve, color: b.color, isGuide: false });
         }
       }
     });
@@ -290,8 +308,8 @@ function TreeBranchConnections({ branches = [] }) {
   return (
     <group>
       {curveData.map((item, idx) => (
-        <mesh key={idx} geometry={new THREE.TubeGeometry(item.curve, 24, 0.05, 8, false)}>
-          <meshBasicMaterial color={item.color} transparent opacity={0.5} />
+        <mesh key={idx} geometry={new THREE.TubeGeometry(item.curve, 24, item.isGuide ? 0.025 : 0.05, 8, false)}>
+          <meshBasicMaterial color={item.color} transparent opacity={item.isGuide ? 0.3 : 0.6} />
         </mesh>
       ))}
     </group>
@@ -301,33 +319,136 @@ function TreeBranchConnections({ branches = [] }) {
 export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShowIssues }) {
   const [selectedCommit, setSelectedCommit] = useState(null);
   const [selectedBranch, setSelectedBranch] = useState(null);
+  const [resetTrigger, setResetTrigger] = useState(0);
+  const [isAutoRotating, setIsAutoRotating] = useState(false);
   const controlsRef = useRef();
   const isUserInteracting = useRef(false);
 
   const branches = TREE_DATA.branches;
 
+  // Flatten all commits in chronological / coordinate order for sequential stepping
+  const allCommitsWithBranch = useMemo(() => {
+    const list = [];
+    branches.forEach((b) => {
+      b.commits.forEach((c) => {
+        list.push({ commit: c, branch: b });
+      });
+    });
+    return list.sort((a, b) => a.commit.x - b.commit.x);
+  }, [branches]);
+
+  const currentCommitIndex = useMemo(() => {
+    if (!selectedCommit) return -1;
+    return allCommitsWithBranch.findIndex((item) => item.commit.id === selectedCommit.id);
+  }, [allCommitsWithBranch, selectedCommit]);
+
+  const handleNextCommit = useCallback(() => {
+    if (allCommitsWithBranch.length === 0) return;
+    const nextIdx = (currentCommitIndex + 1) % allCommitsWithBranch.length;
+    const item = allCommitsWithBranch[nextIdx];
+    setSelectedCommit(item.commit);
+    setSelectedBranch(item.branch);
+  }, [allCommitsWithBranch, currentCommitIndex]);
+
+  const handlePrevCommit = useCallback(() => {
+    if (allCommitsWithBranch.length === 0) return;
+    const prevIdx = (currentCommitIndex - 1 + allCommitsWithBranch.length) % allCommitsWithBranch.length;
+    const item = allCommitsWithBranch[prevIdx];
+    setSelectedCommit(item.commit);
+    setSelectedBranch(item.branch);
+  }, [allCommitsWithBranch, currentCommitIndex]);
+
+  const handleResetView = useCallback(() => {
+    setSelectedCommit(null);
+    setSelectedBranch(null);
+    setIsAutoRotating(false);
+    setResetTrigger((prev) => prev + 1);
+  }, []);
+
+  // Global Keyboard Shortcuts for Git Branches
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+
+      if (e.key === 'ArrowRight' || e.key === 'Tab') {
+        e.preventDefault();
+        handleNextCommit();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handlePrevCommit();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleResetView();
+      } else if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        setIsAutoRotating((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleNextCommit, handlePrevCommit, handleResetView]);
+
+  // Compute dynamic bounding box to auto-frame any repository tree perfectly in the center
+  const autoFrameConfig = useMemo(() => {
+    const allCommits = branches.flatMap((b) => b.commits);
+    if (allCommits.length === 0) {
+      return { center: [0, 0, 0], distance: 20 };
+    }
+
+    const minX = Math.min(...allCommits.map((c) => c.x), -16.0);
+    const maxX = Math.max(...allCommits.map((c) => c.x), 10.0);
+    const minY = Math.min(...branches.map((b) => b.y));
+    const maxY = Math.max(...branches.map((b) => b.y));
+    const minZ = Math.min(...branches.map((b) => b.z));
+    const maxZ = Math.max(...branches.map((b) => b.z));
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const centerZ = (minZ + maxZ) / 2;
+
+    const sizeX = Math.max(1, maxX - minX);
+    const sizeY = Math.max(1, maxY - minY);
+    const sizeZ = Math.max(1, maxZ - minZ);
+
+    const fovRad = (48 * Math.PI) / 180;
+    const aspect = typeof window !== 'undefined' ? window.innerWidth / window.innerHeight : 1.77;
+    const distY = (sizeY / 2) / Math.tan(fovRad / 2);
+    const distX = (sizeX / 2) / (Math.tan(fovRad / 2) * aspect);
+    const distance = Math.max(distY, distX, 12) * 1.35 + (sizeZ / 2);
+
+    return {
+      center: [centerX, centerY, centerZ],
+      distance: Math.max(14, Math.min(60, distance)),
+    };
+  }, [branches]);
+
   return (
     <div className="relative w-full h-full bg-[#040714] overflow-hidden select-none">
       <Canvas
-        camera={{ position: [0, 2, 22], fov: 48 }}
-        gl={{ antialias: true, alpha: false }}
+        camera={{ position: [autoFrameConfig.center[0], autoFrameConfig.center[1] + 0.5, autoFrameConfig.center[2] + autoFrameConfig.distance], fov: 48 }}
+        dpr={[1, 2]}
+        gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
         onPointerMissed={() => {
           setSelectedCommit(null);
           setSelectedBranch(null);
         }}
+        onDoubleClick={() => handleResetView()}
       >
         <color attach="background" args={['#040714']} />
         <ambientLight intensity={1.0} />
         <directionalLight position={[12, 18, 12]} intensity={2.2} color="#e0f2fe" />
         <pointLight position={[-12, -12, -12]} intensity={1.6} color="#6366f1" />
 
-        {/* Breathing Nebula Space Environment (No Grid!) */}
+        {/* Breathing Space Environment */}
         <NebulaBackground activeTheme="all" />
 
-        {/* Smooth Camera Controller */}
+        {/* Dynamic Centered Camera Controller */}
         <SmoothBranchCameraController
           selectedCommit={selectedCommit}
           selectedBranch={selectedBranch}
+          resetTrigger={resetTrigger}
+          autoFrameConfig={autoFrameConfig}
           isUserInteracting={isUserInteracting}
           controlsRef={controlsRef}
         />
@@ -343,6 +464,7 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
               commit={c}
               branch={b}
               isSelected={selectedCommit?.id === c.id}
+              selectedCommit={selectedCommit}
               onSelect={(commit, branch) => {
                 setSelectedCommit(commit);
                 setSelectedBranch(branch);
@@ -351,40 +473,48 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
           ))
         )}
 
-        {/* Floating 3D Branch Header Badges */}
+        {/* Floating 3D Branch Header Badges: Aligned Horizontally on the Left Side */}
         {branches.map((b) => (
           <Html
             key={`header-${b.id}`}
             transform
             sprite
-            position={[b.commits[0].x - 2.8, b.y, b.z]}
+            position={[-15.5, b.y, b.z]}
             distanceFactor={12}
             zIndexRange={[1, 10]}
             className="pointer-events-none select-none"
           >
             <div
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold backdrop-blur-xl border shadow-2xl uppercase tracking-wider whitespace-nowrap"
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono font-bold backdrop-blur-2xl border shadow-2xl uppercase tracking-wider whitespace-nowrap"
               style={{
-                backgroundColor: 'rgba(5, 8, 17, 0.88)',
+                backgroundColor: 'rgba(4, 7, 18, 0.92)',
                 borderColor: b.color,
                 color: b.color,
+                boxShadow: `0 0 20px ${b.color}33`,
               }}
             >
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: b.color }} />
               <GitBranch className="w-3.5 h-3.5" />
               <span>{b.name}</span>
             </div>
           </Html>
         ))}
 
+        {/* Butter-Smooth Orbit Controls with Soft Limits & Auto-Orbit */}
         <OrbitControls
           ref={controlsRef}
           enableDamping
-          dampingFactor={0.08}
-          rotateSpeed={0.6}
-          zoomSpeed={0.9}
-          panSpeed={0.7}
+          dampingFactor={0.05}
+          rotateSpeed={0.5}
+          zoomSpeed={0.7}
+          panSpeed={0.6}
+          screenSpacePanning
           minDistance={4}
-          maxDistance={50}
+          maxDistance={65}
+          minPolarAngle={0.15}
+          maxPolarAngle={Math.PI - 0.15}
+          autoRotate={isAutoRotating}
+          autoRotateSpeed={0.5}
           onStart={() => {
             isUserInteracting.current = true;
           }}
@@ -394,83 +524,129 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
         />
       </Canvas>
 
-      {/* Top HUD: Clean Repository Topology Header */}
-      <div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
-        <div className="p-3 rounded-2xl bg-slate-950/80 border border-white/10 backdrop-blur-xl pointer-events-auto space-y-1 shadow-2xl">
-          <div className="flex items-center gap-2">
-            <GitBranch className="w-4 h-4 text-sky-400" />
-            <h2 className="text-sm font-bold text-slate-100 font-mono">
-              Git Branch Topology: <span className="text-sky-300">{activeRepo}</span>
-            </h2>
-            <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-500/30">
-              Synchronized
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 font-mono">
-            Main Backbone with 4 Feature & Release Sub-Branches • Crystal Commit Nodes
-          </p>
-        </div>
-
-        {/* Branch Legend */}
-        <div className="hidden lg:flex items-center gap-1.5 p-1.5 rounded-2xl bg-slate-950/80 border border-white/10 pointer-events-auto">
-          {branches.map((b) => (
-            <div
-              key={b.id}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-mono bg-slate-900/60 border border-white/5"
-            >
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: b.color }} />
-              <span className="text-slate-300 font-medium">{b.name}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Selected Commit Detail Card */}
       {selectedCommit && selectedBranch && (
-        <div className="absolute bottom-28 left-6 z-30 w-80 p-4 rounded-2xl bg-slate-950/90 border border-sky-500/30 shadow-2xl pointer-events-auto space-y-2 animate-in fade-in slide-in-from-bottom duration-200 backdrop-blur-xl">
+        <div className="absolute bottom-24 left-6 z-30 w-80 p-4 rounded-2xl bg-black/90 border border-sky-500/30 shadow-2xl pointer-events-auto space-y-2 animate-in fade-in slide-in-from-bottom duration-200 backdrop-blur-2xl">
           <div className="flex items-center justify-between border-b border-white/10 pb-2">
             <span className="text-xs font-mono font-bold" style={{ color: selectedBranch.color }}>
               commit {selectedCommit.hash}
             </span>
-            <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-white/10 text-slate-300">
+            <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-white/10 text-zinc-300">
               {selectedBranch.name}
             </span>
           </div>
-          <p className="text-xs font-semibold text-slate-100">
+          <p className="text-xs font-semibold text-white">
             {selectedCommit.msg}
           </p>
-          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-1">
+          <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 pt-1">
             <span className="flex items-center gap-1">
               <User className="w-3 h-3 text-sky-400" />
               {selectedCommit.author}
             </span>
             <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3 text-slate-500" />
+              <Clock className="w-3 h-3 text-zinc-500" />
               {selectedCommit.time}
             </span>
           </div>
         </div>
       )}
 
-      {/* Bottom Center: The Glowing Red Cyber "SHOW ISSUES" CTA */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 pointer-events-auto">
+      {/* Floating Sequential Commit Stepper Deck (Above Footer Center) */}
+      <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex items-center gap-1.5 p-1.5 rounded-full bg-black/60 hover:bg-black/90 border border-white/10 hover:border-white/25 backdrop-blur-3xl shadow-2xl transition-all duration-200">
         <button
-          onClick={onShowIssues}
-          className="group relative flex items-center gap-3 px-8 py-3.5 rounded-2xl font-mono text-sm font-bold text-white bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:via-rose-500 hover:to-red-600 border border-red-400/80 shadow-[0_0_40px_rgba(239,68,68,0.6)] hover:shadow-[0_0_60px_rgba(239,68,68,0.9)] transition-all duration-300 active:scale-95 animate-bounce cursor-pointer"
+          onClick={handlePrevCommit}
+          className="p-1.5 rounded-full hover:bg-white/10 text-zinc-300 hover:text-white transition active:scale-95 cursor-pointer"
+          title="Previous Commit (←)"
         >
-          <div className="absolute -inset-1 rounded-2xl bg-red-500/40 blur-lg group-hover:bg-red-500/70 transition opacity-75" />
-
-          <ShieldAlert className="w-5 h-5 text-white animate-pulse" />
-          <span className="tracking-wider uppercase">
-            ENGAGE AGENTIC TRIAGE: SHOW ISSUES
-          </span>
-          <ArrowRight className="w-5 h-5 group-hover:translate-x-1.5 transition-transform" />
+          <ChevronLeft className="w-4 h-4" />
         </button>
 
-        <p className="text-[11px] font-mono text-slate-400 tracking-wider">
-          Click to analyze security vulnerabilities, duplicates, and regressions
-        </p>
+        <span className="px-3 text-xs font-mono">
+          {selectedCommit ? (
+            <span className="text-white font-bold">
+              commit {selectedCommit.hash} ({currentCommitIndex + 1}/{allCommitsWithBranch.length})
+            </span>
+          ) : (
+            <span className="text-zinc-400">
+              {allCommitsWithBranch.length} Commits • <kbd className="px-1 py-0.5 rounded bg-white/10 text-[10px] text-zinc-300">←</kbd> <kbd className="px-1 py-0.5 rounded bg-white/10 text-[10px] text-zinc-300">→</kbd>
+            </span>
+          )}
+        </span>
+
+        <button
+          onClick={handleNextCommit}
+          className="p-1.5 rounded-full hover:bg-white/10 text-zinc-300 hover:text-white transition active:scale-95 cursor-pointer"
+          title="Next Commit (→)"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
       </div>
+
+      {/* Clean Unified Bottom Footer: Topology Context, Reset View, Auto-Orbit, CTA & Legend */}
+      <footer className="fixed bottom-4 sm:bottom-6 left-4 sm:left-6 right-4 sm:right-6 z-30 flex items-center justify-between gap-3 pointer-events-none flex-wrap sm:flex-nowrap">
+        {/* Left Footer Group: Reset View, Auto-Orbit & Topology Info */}
+        <div className="flex items-center gap-2 pointer-events-auto">
+          <button
+            onClick={handleResetView}
+            className="group flex items-center gap-2 px-3.5 py-2 rounded-full bg-black/60 hover:bg-black/90 border border-white/10 hover:border-white/30 shadow-2xl backdrop-blur-3xl transition-all duration-200 text-xs font-mono text-zinc-300 hover:text-white active:scale-95"
+            title="Reset 3D camera to default overview (Esc)"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white group-hover:-rotate-90 transition-all duration-300" />
+            <span className="font-medium">Reset</span>
+          </button>
+
+          <button
+            onClick={() => setIsAutoRotating((prev) => !prev)}
+            className={`p-2 rounded-full border shadow-2xl backdrop-blur-3xl transition-all duration-200 ${
+              isAutoRotating
+                ? 'bg-sky-500/20 text-sky-300 border-sky-400/50 shadow-sky-500/20'
+                : 'bg-black/60 hover:bg-black/90 text-zinc-400 hover:text-white border-white/10 hover:border-white/30'
+            }`}
+            title={isAutoRotating ? 'Pause Auto-Orbit (Space)' : 'Start Cinematic Auto-Orbit (Space)'}
+          >
+            {isAutoRotating ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+          </button>
+
+          <div className="hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-full bg-black/60 border border-white/10 backdrop-blur-2xl text-xs font-mono text-zinc-300 shadow-2xl">
+            <GitBranch className="w-3.5 h-3.5 text-sky-400" />
+            <span className="text-white font-medium truncate max-w-[150px]">
+              {activeRepo}
+            </span>
+            <span className="text-zinc-600">•</span>
+            <span className="text-emerald-400 flex items-center gap-1 text-[11px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Synchronized
+            </span>
+          </div>
+        </div>
+
+        {/* Center: Minimalist "ENGAGE AGENTIC TRIAGE" CTA */}
+        <div className="pointer-events-auto mx-auto sm:mx-0">
+          <button
+            onClick={onShowIssues}
+            className="group relative flex items-center gap-2.5 px-6 py-2.5 rounded-full font-mono text-xs sm:text-sm font-bold text-black bg-white hover:bg-zinc-200 border border-white shadow-[0_0_35px_rgba(255,255,255,0.35)] transition-all duration-200 active:scale-95 cursor-pointer"
+          >
+            <ShieldAlert className="w-4 h-4 text-black" />
+            <span className="tracking-wider uppercase">
+              Engage Agentic Triage
+            </span>
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform text-black" />
+          </button>
+        </div>
+
+        {/* Right Footer Group: Branch Legend */}
+        <div className="hidden lg:flex items-center gap-1 p-1 rounded-full bg-black/60 border border-white/10 backdrop-blur-2xl pointer-events-auto shadow-2xl">
+          {branches.map((b) => (
+            <div
+              key={b.id}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono text-zinc-300 hover:text-white transition"
+            >
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: b.color }} />
+              <span className="font-medium">{b.name}</span>
+            </div>
+          ))}
+        </div>
+      </footer>
     </div>
   );
 }
