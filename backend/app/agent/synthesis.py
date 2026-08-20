@@ -23,6 +23,19 @@ def run_all_tools(repo: str, issue_number: int) -> dict:
     return evidence
 
 
+def _decision_suffix(match: dict) -> str:
+    """Appends real maintainer-decision text to a duplicate/regression citation,
+    e.g. ' -- closed as "fixed in v6.5.0"', so the explanation says not just
+    that two issues look alike but what actually happened to the other one."""
+    excerpts = match.get("decision_excerpts") or []
+    keyed = next((e for e in excerpts if e.get("matched_phrase")), None)
+    chosen = keyed or (excerpts[0] if excerpts else None)
+    if not chosen:
+        return ""
+    snippet = chosen["text"][:100].replace("\n", " ").strip()
+    return f' -- {chosen["author"]} commented: "{snippet}"'
+
+
 def _rule_based_fallback(issue: dict, evidence: dict) -> dict:
     categories = []
     reasons = []
@@ -37,13 +50,19 @@ def _rule_based_fallback(issue: dict, evidence: dict) -> dict:
         categories.append("likely-duplicate")
         top_match = next((m for m in dup.get("matches", []) if m.get("is_likely_duplicate")), None)
         if top_match:
-            reasons.append(f"Matches open issue #{top_match['number']} ('{top_match['title']}') with {top_match['similarity'] * 100:.1f}% similarity")
+            reasons.append(
+                f"Matches open issue #{top_match['number']} ('{top_match['title']}') with "
+                f"{top_match['similarity'] * 100:.1f}% similarity{_decision_suffix(top_match)}"
+            )
 
     if dup.get("is_possible_regression"):
         categories.append("possible-regression")
         top_match = next((m for m in dup.get("matches", []) if m.get("is_possible_regression")), None)
         if top_match:
-            reasons.append(f"Matches closed issue #{top_match['number']} ('{top_match['title']}') with {top_match['similarity'] * 100:.1f}% similarity (possible regression)")
+            reasons.append(
+                f"Matches closed issue #{top_match['number']} ('{top_match['title']}') with "
+                f"{top_match['similarity'] * 100:.1f}% similarity (possible regression){_decision_suffix(top_match)}"
+            )
 
     resp = evidence.get("response_time_check", {})
     if resp.get("is_urgent"):

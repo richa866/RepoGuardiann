@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timezone
 
 from app.db.database import get_conn
-from app.rag.retrieval import find_similar
+from app.rag.retrieval import find_similar, get_decision_context
 
 # Calibrated against real httpie/cli data (100 issues, see backend/scripts/test_rag.py),
 # not guessed. 0.80 was too strict: it missed real duplicate PR clusters that use
@@ -90,6 +90,10 @@ def duplicate_check(repo: str, issue_number: int, top_k: int = 5) -> dict:
     has_likely_dup = False
     has_regression = False
 
+    decision_contexts = {
+        c["number"]: c for c in get_decision_context(repo, [m["number"] for m in raw_matches])
+    }
+
     for m in raw_matches:
         sim = m["similarity"]
         is_dup = sim >= DUPLICATE_SIMILARITY_THRESHOLD and m["state"] == "open"
@@ -98,10 +102,12 @@ def duplicate_check(repo: str, issue_number: int, top_k: int = 5) -> dict:
             has_likely_dup = True
         if is_regr:
             has_regression = True
+        ctx = decision_contexts.get(m["number"])
         matches.append({
             **m,
             "is_likely_duplicate": is_dup,
             "is_possible_regression": is_regr,
+            "decision_excerpts": ctx["excerpts"] if ctx else [],
         })
 
     return {
