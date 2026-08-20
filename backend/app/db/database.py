@@ -1,39 +1,55 @@
-"""SQLite access layer. Plain sqlite3 (no ORM) -- matches CONTRACTS.md.
+"""SQLite database access layer.
+Plain stdlib sqlite3 connection helper (WAL mode, row_factory = sqlite3.Row) — no ORM.
+Matches CONTRACTS.md specification.
 """
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.config import settings
-
 _local = threading.local()
-SCHEMA_VERSION = 2
 SCHEMA_FILE = Path(__file__).resolve().parent / "schema.sql"
 
-DATA_TABLES = [
-    "issues", "comments", "subtasks", "escalations", "feedback",
-    "health_snapshots", "monitor_log", "repos",
-]
+
+def get_db_path() -> str:
+    """Resolve database path from environment variable or default."""
+    repo_root = Path(__file__).resolve().parent.parent.parent.parent
+    env_path = os.getenv("DB_PATH") or os.getenv("DATABASE_PATH")
+    if env_path:
+        p = Path(env_path)
+        if not p.is_absolute():
+            p = (repo_root / p).resolve()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return str(p)
+
+    default_path = repo_root / "data" / "repoguardian.db"
+    default_path.parent.mkdir(parents=True, exist_ok=True)
+    return str(default_path)
 
 
-def get_conn() -> sqlite3.Connection:
+def get_conn(db_path: str | None = None) -> sqlite3.Connection:
+    """Get thread-local SQLite connection with WAL mode and sqlite3.Row factory."""
     conn = getattr(_local, "conn", None)
     if conn is None:
-        conn = sqlite3.connect(settings.database_path, check_same_thread=False)
+        target_path = db_path or get_db_path()
+        Path(target_path).parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(target_path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA foreign_keys = ON;")
         _local.conn = conn
     return conn
 
 
 @contextmanager
-def tx():
-    conn = get_conn()
+def tx(db_path: str | None = None):
+    """Transaction context manager for atomic database operations."""
+    conn = get_conn(db_path)
     try:
         yield conn
         conn.commit()
@@ -42,23 +58,28 @@ def tx():
         raise
 
 
-def init_db() -> None:
-    conn = get_conn()
-    current_version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if current_version != SCHEMA_VERSION:
-        conn.execute("PRAGMA foreign_keys = OFF")
-        for table in DATA_TABLES:
-            conn.execute(f"DROP TABLE IF EXISTS {table}")
-        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-        conn.commit()
-        conn.execute("PRAGMA foreign_keys = ON")
+def init_db(db_path: str | None = None) -> sqlite3.Connection:
+    """Initialize database tables and indexes from schema.sql if they do not exist yet."""
+    conn = get_conn(db_path)
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA foreign_keys = ON;")
 
-    schema_sql = SCHEMA_FILE.read_text()
+    if SCHEMA_FILE.exists():
+        schema_sql = SCHEMA_FILE.read_text(encoding="utf-8")
+    else:
+        raise FileNotFoundError(f"schema.sql not found at {SCHEMA_FILE}")
+
     conn.executescript(schema_sql)
+    try:
+        conn.execute("ALTER TABLE comments ADD COLUMN is_maintainer INTEGER NOT NULL DEFAULT 0;")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
+    return conn
 
 
 def now_iso() -> str:
+    """Return current UTC timestamp in ISO 8601 format."""
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -128,20 +149,28 @@ def replace_comments(repo: str, issue_number: int, comments: list[dict]) -> None
     with tx() as c:
         c.execute("DELETE FROM comments WHERE repo = ? AND issue_number = ?", (repo, issue_number))
         c.executemany(
-            "INSERT INTO comments (repo, issue_number, github_comment_id, author, body, created_at) "
-            "VALUES (:repo, :issue_number, :github_comment_id, :author, :body, :created_at)",
-            [{**cm, "repo": repo, "issue_number": issue_number} for cm in comments],
+            "INSERT INTO comments (repo, issue_number, github_comment_id, author, body, created_at, is_maintainer) "
+            "VALUES (:repo, :issue_number, :github_comment_id, :author, :body, :created_at, :is_maintainer)",
+            [{**cm, "repo": repo, "issue_number": issue_number, "is_maintainer": int(cm.get("is_maintainer", 0))} for cm in comments],
         )
 
 
-def enqueue_subtask(repo: str, task_type: str, issue_number: int | None = None) -> int:
+def enqueue_subtask(repo: str, task_type: str, issue_number: int | None = None, dedupe_key: str | None = None) -> int | None:
+    if not dedupe_key:
+        dedupe_key = f"{repo}#{issue_number}#{task_type}#{now_iso()}"
     with tx() as c:
-        cur = c.execute(
-            "INSERT INTO subtasks (repo, issue_number, task_type, status, created_at) "
-            "VALUES (?, ?, ?, 'pending', ?)",
-            (repo, issue_number, task_type, now_iso()),
-        )
-        return cur.lastrowid
+        try:
+            cur = c.execute(
+                """
+                INSERT INTO subtasks (repo, issue_number, task_type, dedupe_key, status, created_at)
+                VALUES (?, ?, ?, ?, 'pending', ?)
+                ON CONFLICT(dedupe_key) DO NOTHING
+                """,
+                (repo, issue_number, task_type, dedupe_key, now_iso()),
+            )
+            return cur.lastrowid
+        except sqlite3.IntegrityError:
+            return None
 
 
 def upsert_repo(repo: str, token: str | None) -> None:
