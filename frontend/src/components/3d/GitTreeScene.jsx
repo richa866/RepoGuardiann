@@ -915,11 +915,8 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
   const [isAutoRotating, setIsAutoRotating] = useState(false);
   const [viewPreset, setViewPreset] = useState('3d');
 
-  // Guarantee minimum 3 nodes per sub-type (excluding overridden issues)
-  const augmentedIssues = useMemo(() => {
-    // Exclude issues overridden by the maintainer
-    const activeIssues = issues.filter((i) => feedbackMap[i.number] !== 'down');
-
+  // Guarantee initial 3 nodes per sub-type at baseline, but NEVER re-add overridden issues
+  const baselineIssues = useMemo(() => {
     const byCategory = {
       security_urgent: [],
       regression: [],
@@ -929,7 +926,7 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
       normal: [],
     };
 
-    activeIssues.forEach((issue) => {
+    issues.forEach((issue) => {
       const cats = issue.latest_categories || [];
       let placed = false;
       if (matchesCategory(cats, 'security_urgent')) { byCategory.security_urgent.push(issue); placed = true; }
@@ -940,24 +937,29 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, feedba
       if (!placed) { byCategory.normal.push(issue); }
     });
 
-    const finalIssues = [...activeIssues];
-    const existingNumbers = new Set(activeIssues.map((i) => i.number));
+    const finalIssues = [...issues];
+    const existingNumbers = new Set(issues.map((i) => i.number));
 
     Object.entries(DEFAULT_SUBTYPE_SEEDS).forEach(([catKey, seeds]) => {
       const currentCount = byCategory[catKey].length;
       if (currentCount < 3) {
-        seeds.forEach((seed) => {
-          if (!existingNumbers.has(seed.number) && feedbackMap[seed.number] !== 'down' && byCategory[catKey].length < 3) {
+        const needed = 3 - currentCount;
+        seeds.slice(0, needed).forEach((seed) => {
+          if (!existingNumbers.has(seed.number)) {
             finalIssues.push(seed);
             existingNumbers.add(seed.number);
-            byCategory[catKey].push(seed);
           }
         });
       }
     });
 
     return finalIssues;
-  }, [issues, feedbackMap]);
+  }, [issues]);
+
+  // Exclude overridden issues so the constellation genuinely shrinks and readjusts
+  const augmentedIssues = useMemo(() => {
+    return baselineIssues.filter((i) => feedbackMap[i.number] !== 'down');
+  }, [baselineIssues, feedbackMap]);
 
   // Filter issues for sequential stepping
   const visibleIssues = useMemo(() => {

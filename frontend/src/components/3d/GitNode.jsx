@@ -225,12 +225,16 @@ export function GitNode({
       setIsInRange(inRange);
     }
 
-    // Keep position rock-solid static in filtered view (no bobbing)
+    // Smoothly glide to the target constellation position with lerp (0.08)
     if (!isFiltered) {
       const yOffset = Math.sin(t * 1.5 + position[0] * 0.4) * 0.12;
-      groupRef.current.position.y = position[1] + yOffset;
+      groupRef.current.position.x = THREE.MathUtils.lerp(groupRef.current.position.x, position[0], 0.08);
+      groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, position[1] + yOffset, 0.08);
+      groupRef.current.position.z = THREE.MathUtils.lerp(groupRef.current.position.z, position[2], 0.08);
     } else {
-      groupRef.current.position.set(position[0], position[1], position[2]);
+      groupRef.current.position.x = THREE.MathUtils.lerp(groupRef.current.position.x, position[0], 0.08);
+      groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, position[1], 0.08);
+      groupRef.current.position.z = THREE.MathUtils.lerp(groupRef.current.position.z, position[2], 0.08);
     }
 
     // Spin ONLY the inner crystal orb, keeping groupRef and Html card completely static
