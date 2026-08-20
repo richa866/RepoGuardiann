@@ -119,7 +119,7 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
     const t = state.clock.getElapsedTime();
 
     // Smooth floating bob
-    const yOffset = Math.sin(t * 1.5 + position[0] * 0.4) * 0.18;
+    const yOffset = Math.sin(t * 1.5 + position[0] * 0.4) * 0.15;
     groupRef.current.position.y = position[1] + yOffset;
 
     // Smooth continuous rotation
@@ -142,7 +142,7 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
     }
 
     // Smooth scaling on hover/select
-    const targetScale = isSelected ? 1.4 : hovered ? 1.25 : 1.0;
+    const targetScale = isSelected ? 1.35 : hovered ? 1.2 : 1.0;
     groupRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
   });
 
@@ -168,44 +168,45 @@ export function GitNode({ issue, position, isSelected, onSelect }) {
         document.body.style.cursor = 'auto';
       }}
     >
-      <primitive object={clonedScene} scale={0.78} />
+      <primitive object={clonedScene} scale={0.75} />
 
       {/* Selected Halo Ring */}
       {isSelected && (
         <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[1.25, 1.42, 32]} />
+          <ringGeometry args={[1.25, 1.45, 32]} />
           <meshBasicMaterial color="#38bdf8" side={THREE.DoubleSide} transparent opacity={0.9} />
         </mesh>
       )}
 
-      {/* High-Readability Floating 3D HUD Label */}
+      {/* Proportional 3D Transformed Billboard Label (scales 1:1 with 3D space) */}
       <Html
-        position={[0, 1.75, 0]}
-        center
-        distanceFactor={28}
-        className="pointer-events-none transition-all duration-200"
+        transform
+        sprite
+        position={[0, 1.65, 0]}
+        distanceFactor={11}
+        className="pointer-events-none select-none"
       >
         <div
-          className={`flex flex-col gap-1 px-3 py-1.5 rounded-2xl text-xs font-mono font-medium backdrop-blur-2xl border shadow-2xl transition-all max-w-[220px] ${
+          className={`flex flex-col gap-1 p-2 rounded-2xl font-mono backdrop-blur-2xl border shadow-2xl transition-all w-52 ${
             isSelected
-              ? 'bg-slate-950/95 text-white border-sky-400 scale-110 shadow-[0_0_25px_rgba(56,189,248,0.4)]'
+              ? 'bg-slate-950/95 text-white border-sky-400 scale-105 shadow-[0_0_25px_rgba(56,189,248,0.5)]'
               : hovered
               ? 'bg-slate-900/95 text-white border-slate-400 scale-105 shadow-2xl'
               : 'bg-slate-950/85 text-slate-200 border-white/15'
           }`}
         >
           {/* Header Row */}
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-1.5">
             <div className="flex items-center gap-1.5 font-bold">
               <span
                 className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
                 style={{ backgroundColor: `#${color.getHexString()}` }}
               />
-              <span className="text-white font-mono text-xs">#{issue?.number}</span>
+              <span className="text-white font-mono text-xs font-bold">#{issue?.number}</span>
             </div>
 
             <span
-              className={`text-[9px] uppercase font-bold px-1.5 py-0.2 rounded-md ${
+              className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-md ${
                 isSecurity
                   ? 'bg-red-950 text-red-200 border border-red-500/60'
                   : isContentious

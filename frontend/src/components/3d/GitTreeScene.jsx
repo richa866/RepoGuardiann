@@ -1,5 +1,5 @@
-import React, { useMemo, Suspense, Component } from 'react';
-import { Canvas } from '@react-three/fiber';
+import React, { useMemo, useRef, useEffect, Suspense, Component } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { GitNode } from './GitNode';
@@ -85,6 +85,36 @@ const CLUSTERS = {
   },
 };
 
+// Smooth Camera Controller that glides when selecting an issue node
+function SmoothCameraController({ selectedPosition, controlsRef }) {
+  const { camera } = useThree();
+  const targetLookAt = useRef(new THREE.Vector3(0, 0, 0));
+  const targetCamPos = useRef(new THREE.Vector3(0, 4, 34));
+
+  useEffect(() => {
+    if (selectedPosition) {
+      targetLookAt.current.set(selectedPosition[0], selectedPosition[1], selectedPosition[2]);
+      targetCamPos.current.set(
+        selectedPosition[0],
+        selectedPosition[1] + 1.2,
+        selectedPosition[2] + 9.5
+      );
+    } else {
+      targetLookAt.current.set(0, 0, 0);
+      targetCamPos.current.set(0, 4, 34);
+    }
+  }, [selectedPosition]);
+
+  useFrame(() => {
+    if (controlsRef.current) {
+      controlsRef.current.target.lerp(targetLookAt.current, 0.06);
+    }
+    camera.position.lerp(targetCamPos.current, 0.06);
+  });
+
+  return null;
+}
+
 function ClusterConnectors({ connections = [] }) {
   const tubeGeos = useMemo(() => {
     return connections.map(({ p1, p2, color, isDashed }) => {
@@ -112,9 +142,9 @@ function ClusterConnectors({ connections = [] }) {
   );
 }
 
-function SceneContent({ issues = [], selectedIssue, onSelectIssue }) {
+function SceneContent({ issues = [], selectedIssue, onSelectIssue, controlsRef }) {
   // Group issues into spacious category-based clusters
-  const { nodeData, clusterList, connections } = useMemo(() => {
+  const { nodeData, clusterList, connections, selectedPos } = useMemo(() => {
     const clusterMap = {
       security_urgent: [],
       regression: [],
@@ -144,6 +174,7 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue }) {
     const nodes = [];
     const conns = [];
     const activeClusters = [];
+    let selPos = null;
 
     Object.entries(clusterMap).forEach(([clusterKey, clusterIssues]) => {
       const clusterCfg = CLUSTERS[clusterKey];
@@ -157,7 +188,6 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue }) {
         const cCenter = clusterCfg.center;
         clusterIssues.forEach((issue, idx) => {
           const count = clusterIssues.length;
-          // Increased orbital radius for spacious separation
           const radius = count > 1 ? 3.2 + (idx * 1.2) : 0.0;
           const angle = (idx / Math.max(1, count)) * Math.PI * 2 + 0.35;
 
@@ -166,6 +196,10 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue }) {
             cCenter[1] + (Math.sin(idx * 2.5) * 0.8),
             cCenter[2] + Math.sin(angle) * radius,
           ];
+
+          if (selectedIssue && selectedIssue.number === issue.number && selectedIssue.repo === issue.repo) {
+            selPos = pos;
+          }
 
           nodes.push({ issue, position: pos, clusterKey });
 
@@ -190,8 +224,8 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue }) {
       }
     });
 
-    return { nodeData: nodes, clusterList: activeClusters, connections: conns };
-  }, [issues]);
+    return { nodeData: nodes, clusterList: activeClusters, connections: conns, selectedPos: selPos };
+  }, [issues, selectedIssue]);
 
   return (
     <>
@@ -203,6 +237,9 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue }) {
       {/* Starfield & Deep Space Grid */}
       <Stars radius={90} depth={60} count={3500} factor={4} saturation={0.6} fade speed={1} />
       <gridHelper args={[160, 80, '#1e293b', '#0b1329']} position={[0, -12, 0]} />
+
+      {/* Smooth Camera Controller */}
+      <SmoothCameraController selectedPosition={selectedPos} controlsRef={controlsRef} />
 
       {/* Cluster Connecting Tubes */}
       <ClusterConnectors connections={connections} />
@@ -220,16 +257,17 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue }) {
         ))}
       </group>
 
-      {/* Floating 3D Cluster Header Badges */}
+      {/* Floating 3D Cluster Header Badges (Proportionally Scaled with transform & sprite) */}
       {clusterList.map((c) => {
         const Icon = c.icon;
         return (
           <Html
             key={`cluster-${c.id}`}
+            transform
+            sprite
             position={[c.center[0], c.center[1] + 2.8, c.center[2]]}
-            center
-            distanceFactor={32}
-            className="pointer-events-none"
+            distanceFactor={14}
+            className="pointer-events-none select-none"
           >
             <div
               className="flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-mono font-bold backdrop-blur-2xl border shadow-2xl uppercase tracking-wider whitespace-nowrap"
@@ -251,19 +289,22 @@ function SceneContent({ issues = [], selectedIssue, onSelectIssue }) {
       })}
 
       <OrbitControls
+        ref={controlsRef}
         enableDamping
         dampingFactor={0.06}
         rotateSpeed={0.5}
         zoomSpeed={0.8}
         panSpeed={0.6}
-        minDistance={8}
-        maxDistance={75}
+        minDistance={4}
+        maxDistance={80}
       />
     </>
   );
 }
 
 export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallback }) {
+  const controlsRef = useRef();
+
   return (
     <div className="w-full h-full relative select-none">
       <ErrorBoundary3D fallback={fallback}>
@@ -287,6 +328,7 @@ export function GitTreeScene({ issues = [], selectedIssue, onSelectIssue, fallba
               issues={issues}
               selectedIssue={selectedIssue}
               onSelectIssue={onSelectIssue}
+              controlsRef={controlsRef}
             />
           </Canvas>
         </Suspense>

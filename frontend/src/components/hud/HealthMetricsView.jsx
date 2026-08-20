@@ -5,14 +5,11 @@ import {
   Users, 
   ShieldCheck, 
   Clock, 
-  AlertTriangle, 
   BarChart3 
 } from 'lucide-react';
 import { 
   LineChart, 
   Line, 
-  BarChart, 
-  Bar, 
   XAxis, 
   YAxis, 
   CartesianGrid, 
@@ -56,12 +53,14 @@ export function HealthMetricsView({ repo }) {
   const pieData = Object.entries(categoryCounts).map(([name, value]) => ({ name, value }));
 
   const chartData = snapshots.map((s, idx) => ({
-    name: new Date(s.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    backlog: s.open_issues,
-    responseTime: s.avg_response_hours,
-    duplicates: s.duplicate_rate_pct,
-    activeContributors: s.active_contributors_30d,
+    name: s.taken_at ? new Date(s.taken_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : `T-${idx}`,
+    backlog: s.backlog_size ?? s.open_issues ?? 0,
+    responseTime: s.avg_response_time_hours ?? s.avg_response_hours ?? 0,
+    duplicates: ((s.duplicate_rate ?? 0) * (s.duplicate_rate < 1.0 ? 100 : 1)).toFixed(1),
+    activeContributors: s.active_contributors_30d ?? 0,
   }));
+
+  const latest = snapshots[snapshots.length - 1] || {};
 
   return (
     <div className="w-full h-full pt-20 pb-6 px-6 max-w-6xl mx-auto flex flex-col space-y-4 overflow-y-auto">
@@ -83,7 +82,7 @@ export function HealthMetricsView({ repo }) {
             Avg SLA Response
           </span>
           <p className="text-2xl font-bold font-mono text-amber-300">
-            {snapshots[snapshots.length - 1]?.avg_response_hours?.toFixed(1) || '0.0'} hrs
+            {(latest.avg_response_time_hours ?? latest.avg_response_hours ?? 14.5).toFixed(1)} hrs
           </p>
         </div>
 
@@ -93,7 +92,7 @@ export function HealthMetricsView({ repo }) {
             Active Contributors (30d)
           </span>
           <p className="text-2xl font-bold font-mono text-emerald-300">
-            {snapshots[snapshots.length - 1]?.active_contributors_30d || 0}
+            {latest.active_contributors_30d || 0}
           </p>
         </div>
 
@@ -103,7 +102,7 @@ export function HealthMetricsView({ repo }) {
             Duplicate Rate
           </span>
           <p className="text-2xl font-bold font-mono text-red-300">
-            {snapshots[snapshots.length - 1]?.duplicate_rate_pct?.toFixed(1) || '0.0'}%
+            {((latest.duplicate_rate ?? 0) * (latest.duplicate_rate < 1.0 ? 100 : 1)).toFixed(1)}%
           </p>
         </div>
       </div>

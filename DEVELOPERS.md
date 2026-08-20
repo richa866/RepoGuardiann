@@ -242,3 +242,14 @@ blender --background --python scripts/generate_octocat_logo.py
 blender --background --python scripts/generate_branch_node.py
 blender --background --python scripts/generate_smooth_issue_orb.py
 ```
+
+### 📍 Milestone 10: Proportional 3D Scaling & Smooth Camera Navigation
+* **Proportional 3D Text & Label Scaling**:
+  * Switched all 3D HTML labels in `GitNode.jsx`, `GitTreeScene.jsx`, and `GitBranchGraph3D.jsx` to `<Html transform sprite distanceFactor={...}>`.
+  * Text and glassmorphism cards now scale **1:1 in true 3D perspective** alongside the 3D meshes when zooming in/out, eliminating oversized label bloat.
+* **Smooth Camera Controllers**:
+  * Added `SmoothCameraController` in `GitTreeScene.jsx` and `SmoothBranchCameraController` in `GitBranchGraph3D.jsx`.
+  * Selecting a node or commit smoothly lerps camera position and OrbitControls target (`controls.target.lerp()`) to focus on the selected element.
+  * Deselecting returns camera to the overview vantage point.
+* **Health Metrics Data Mapping**:
+  * Refined `HealthMetricsView.jsx` to map SQLite `health_snapshots` timestamps, SLA response drift, duplicate rate %, and 30-day contributor activity.

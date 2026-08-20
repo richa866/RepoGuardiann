@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, Html, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { 
@@ -10,7 +10,6 @@ import {
   GitMerge,
   User,
   Clock,
-  Sparkles
 } from 'lucide-react';
 
 // Structured Hierarchical Git Tree Definition
@@ -97,6 +96,36 @@ const TREE_DATA = {
   ],
 };
 
+// Smooth Camera Controller for Git Tree
+function SmoothBranchCameraController({ selectedCommit, selectedBranch, controlsRef }) {
+  const { camera } = useThree();
+  const targetLookAt = useRef(new THREE.Vector3(0, 0, 0));
+  const targetCamPos = useRef(new THREE.Vector3(0, 2, 22));
+
+  useEffect(() => {
+    if (selectedCommit && selectedBranch) {
+      targetLookAt.current.set(selectedCommit.x, selectedBranch.y, selectedBranch.z);
+      targetCamPos.current.set(
+        selectedCommit.x,
+        selectedBranch.y + 0.8,
+        selectedBranch.z + 8.5
+      );
+    } else {
+      targetLookAt.current.set(0, 0, 0);
+      targetCamPos.current.set(0, 2, 22);
+    }
+  }, [selectedCommit, selectedBranch]);
+
+  useFrame(() => {
+    if (controlsRef.current) {
+      controlsRef.current.target.lerp(targetLookAt.current, 0.06);
+    }
+    camera.position.lerp(targetCamPos.current, 0.06);
+  });
+
+  return null;
+}
+
 function CrystalCommitNode({ commit, branch, isSelected, onSelect }) {
   const meshRef = useRef();
   const [hovered, setHovered] = useState(false);
@@ -126,7 +155,7 @@ function CrystalCommitNode({ commit, branch, isSelected, onSelect }) {
     meshRef.current.rotation.y += 0.012;
     meshRef.current.rotation.z = Math.sin(t * 0.8 + commit.x) * 0.08;
 
-    const targetScale = isSelected ? 1.4 : hovered ? 1.25 : 1.0;
+    const targetScale = isSelected ? 1.35 : hovered ? 1.2 : 1.0;
     meshRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
   });
 
@@ -158,15 +187,21 @@ function CrystalCommitNode({ commit, branch, isSelected, onSelect }) {
         </mesh>
       )}
 
-      {/* Floating 3D Commit Tag */}
-      <Html position={[0, 1.2, 0]} center distanceFactor={22} className="pointer-events-none">
+      {/* Proportional 3D Transformed Billboard Commit Tag */}
+      <Html
+        transform
+        sprite
+        position={[0, 1.4, 0]}
+        distanceFactor={10}
+        className="pointer-events-none select-none"
+      >
         <div
-          className={`flex flex-col gap-0.5 px-2.5 py-1 rounded-xl text-xs font-mono backdrop-blur-xl border shadow-xl transition-all ${
+          className={`flex flex-col gap-0.5 px-2.5 py-1 rounded-xl text-xs font-mono backdrop-blur-xl border shadow-xl transition-all max-w-[160px] ${
             isSelected
-              ? 'bg-sky-950/95 text-white border-sky-400 scale-110 shadow-sky-500/30'
+              ? 'bg-sky-950/95 text-white border-sky-400 scale-105 shadow-sky-500/40'
               : hovered
               ? 'bg-slate-900/95 text-white border-slate-400 scale-105 shadow-black/80'
-              : 'bg-slate-950/70 text-slate-300 border-white/10 opacity-80'
+              : 'bg-slate-950/75 text-slate-300 border-white/10 opacity-85'
           }`}
         >
           <div className="flex items-center gap-1.5 font-bold">
@@ -178,7 +213,7 @@ function CrystalCommitNode({ commit, branch, isSelected, onSelect }) {
               </span>
             )}
           </div>
-          <span className="text-[11px] text-slate-300 truncate max-w-[140px]">
+          <span className="text-[11px] text-slate-300 truncate">
             {commit.msg}
           </span>
         </div>
@@ -207,7 +242,6 @@ function TreeBranchConnections({ branches = [] }) {
       for (let i = 0; i < b.commits.length - 1; i++) {
         const p1 = new THREE.Vector3(b.commits[i].x, b.y, b.z);
         const p2 = new THREE.Vector3(b.commits[i + 1].x, b.y, b.z);
-        const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
         const curve = new THREE.LineCurve3(p1, p2);
         list.push({ curve, color: b.color });
       }
@@ -255,6 +289,7 @@ function TreeBranchConnections({ branches = [] }) {
 export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShowIssues }) {
   const [selectedCommit, setSelectedCommit] = useState(null);
   const [selectedBranch, setSelectedBranch] = useState(null);
+  const controlsRef = useRef();
 
   const branches = TREE_DATA.branches;
 
@@ -277,6 +312,13 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
         <Stars radius={70} depth={50} count={3000} factor={4} saturation={0.6} fade speed={1} />
         <gridHelper args={[120, 60, '#1e293b', '#0b1329']} position={[0, -8, 0]} />
 
+        {/* Smooth Camera Controller */}
+        <SmoothBranchCameraController
+          selectedCommit={selectedCommit}
+          selectedBranch={selectedBranch}
+          controlsRef={controlsRef}
+        />
+
         {/* Hierarchical Connecting Tubes */}
         <TreeBranchConnections branches={branches} />
 
@@ -296,19 +338,20 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
           ))
         )}
 
-        {/* Floating 3D Branch Header Badges */}
+        {/* Floating 3D Branch Header Badges (Proportionally Scaled) */}
         {branches.map((b) => (
           <Html
             key={`header-${b.id}`}
+            transform
+            sprite
             position={[b.commits[0].x - 2.8, b.y, b.z]}
-            center
-            distanceFactor={24}
-            className="pointer-events-none"
+            distanceFactor={12}
+            className="pointer-events-none select-none"
           >
             <div
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold backdrop-blur-xl border shadow-2xl uppercase tracking-wider"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold backdrop-blur-xl border shadow-2xl uppercase tracking-wider whitespace-nowrap"
               style={{
-                backgroundColor: 'rgba(5, 8, 17, 0.85)',
+                backgroundColor: 'rgba(5, 8, 17, 0.88)',
                 borderColor: b.color,
                 color: b.color,
               }}
@@ -320,12 +363,13 @@ export function GitBranchGraph3D({ activeRepo = 'demo/repoguardian-seed', onShow
         ))}
 
         <OrbitControls
+          ref={controlsRef}
           enableDamping
           dampingFactor={0.06}
           rotateSpeed={0.5}
           zoomSpeed={0.8}
           panSpeed={0.6}
-          minDistance={6}
+          minDistance={4}
           maxDistance={50}
         />
       </Canvas>
