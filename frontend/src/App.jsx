@@ -121,6 +121,15 @@ export default function App() {
     return () => clearInterval(interval);
   }, [refreshData]);
 
+  // Dynamic Clean Title in URL Tab Bar
+  useEffect(() => {
+    if (health?.active_repo) {
+      document.title = `RepoGuardian • ${health.active_repo}`;
+    } else {
+      document.title = 'RepoGuardian';
+    }
+  }, [health?.active_repo]);
+
   // Transition from Branch Topology to Main Triage Page
   const handleEngageTriage = () => {
     setIsWarpTransitioning(true);
