@@ -52,6 +52,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
   const [labelsApplied, setLabelsApplied] = useState(false);
   const [closingIssue, setClosingIssue] = useState(false);
   const [issueClosed, setIssueClosed] = useState(false);
+  const [actionNotice, setActionNotice] = useState(null);
 
   // Fetch issue detail when issue changes
   useEffect(() => {
@@ -62,6 +63,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
     setCommentPosted(false);
     setLabelsApplied(false);
     setIssueClosed(false);
+    setActionNotice(null);
 
     api.getIssue(issue.number, issue.repo).then(({ data }) => {
       if (isMounted) {
@@ -151,10 +153,20 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
   async function handlePostComment() {
     if (!draftedComment || postingComment) return;
     setPostingComment(true);
-    const { error } = await api.postComment(issue.number, draftedComment, issue.repo);
+    setActionNotice(null);
+    const { data, error } = await api.postComment(issue.number, draftedComment, issue.repo);
     setPostingComment(false);
-    if (!error) {
+    if (error) {
+      setActionNotice({ type: 'error', text: `Failed to post comment: ${error}` });
+    } else if (data) {
       setCommentPosted(true);
+      if (data.posted_on_github) {
+        setActionNotice({ type: 'success', text: `Comment posted live to GitHub as @${data.author || 'maintainer'}!` });
+      } else if (data.github_error) {
+        setActionNotice({ type: 'warning', text: `Comment recorded locally. GitHub API: ${data.github_error}` });
+      } else {
+        setActionNotice({ type: 'success', text: `Comment saved locally.` });
+      }
       setTimeout(() => setCommentPosted(false), 4000);
     }
   }
@@ -162,10 +174,20 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
   async function handleApplyLabels() {
     if (categories.length === 0 || applyingLabels) return;
     setApplyingLabels(true);
-    const { error } = await api.addLabels(issue.number, categories, issue.repo);
+    setActionNotice(null);
+    const { data, error } = await api.addLabels(issue.number, categories, issue.repo);
     setApplyingLabels(false);
-    if (!error) {
+    if (error) {
+      setActionNotice({ type: 'error', text: `Failed to apply labels: ${error}` });
+    } else if (data) {
       setLabelsApplied(true);
+      if (data.posted_on_github) {
+        setActionNotice({ type: 'success', text: `Labels synced live to GitHub as @${data.author || 'maintainer'}!` });
+      } else if (data.github_error) {
+        setActionNotice({ type: 'warning', text: `Labels updated locally. GitHub API: ${data.github_error}` });
+      } else {
+        setActionNotice({ type: 'success', text: `Labels applied locally.` });
+      }
       setTimeout(() => setLabelsApplied(false), 4000);
     }
   }
@@ -173,11 +195,22 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
   async function handleCloseDuplicate(duplicateNum) {
     if (closingIssue) return;
     setClosingIssue(true);
+    setActionNotice(null);
     const closeComment = `Closing as duplicate of #${duplicateNum}. Verified by RepoGuardian maintainer.`;
-    const { error } = await api.closeIssue(issue.number, 'not_planned', closeComment, issue.repo);
+    const { data, error } = await api.closeIssue(issue.number, 'not_planned', closeComment, issue.repo);
     setClosingIssue(false);
-    if (!error) {
+    if (error || data?.status === 'failed') {
+      setActionNotice({
+        type: 'error',
+        text: data?.github_error || error || 'Failed to close issue on GitHub. Verify your PAT token has "repo" write scope.',
+      });
+    } else if (data) {
       setIssueClosed(true);
+      if (data.posted_on_github) {
+        setActionNotice({ type: 'success', text: `Issue closed live on GitHub as @${data.author || 'maintainer'}!` });
+      } else {
+        setActionNotice({ type: 'success', text: `Issue marked closed locally.` });
+      }
       if (onFeedbackSubmitted) onFeedbackSubmitted(issue.number, 'up');
     }
   }
@@ -224,6 +257,30 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
       {/* Highly Descriptive Scrollable Body Content */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs pr-2.5 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
         
+        {/* Action Notice Alert */}
+        {actionNotice && (
+          <div className={`p-3 rounded-2xl border text-xs font-mono flex items-center justify-between gap-2 animate-in fade-in duration-200 ${
+            actionNotice.type === 'success'
+              ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-200'
+              : actionNotice.type === 'warning'
+              ? 'bg-amber-950/60 border-amber-500/40 text-amber-200'
+              : 'bg-rose-950/60 border-rose-500/40 text-rose-200'
+          }`}>
+            <div className="flex items-center gap-2">
+              {actionNotice.type === 'success' && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
+              {actionNotice.type === 'warning' && <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />}
+              {actionNotice.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+              <span>{actionNotice.text}</span>
+            </div>
+            <button
+              onClick={() => setActionNotice(null)}
+              className="text-zinc-400 hover:text-white p-0.5"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Contributor / Owner In-Depth Dossier Card */}
         <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">

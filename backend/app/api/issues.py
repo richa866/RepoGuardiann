@@ -533,19 +533,25 @@ def close_issue_endpoint(
             logger.warning("GitHub close_issue failed for %s#%s: %s", target, number, exc)
             gh_error = str(exc)
 
-    with tx() as c:
-        if body.comment:
+    # Only update local database if GitHub close succeeded, or in demo/tokenless mode
+    should_update_local_db = True
+    if token and not posted_on_github:
+        should_update_local_db = False
+
+    if should_update_local_db:
+        with tx() as c:
+            if body.comment:
+                c.execute(
+                    "INSERT INTO comments (repo, issue_number, author, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (target, number, author, body.comment, now_iso(), now_iso()),
+                )
             c.execute(
-                "INSERT INTO comments (repo, issue_number, author, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (target, number, author, body.comment, now_iso(), now_iso()),
+                "UPDATE issues SET state = 'closed', updated_at = ? WHERE repo = ? AND number = ?",
+                (now_iso(), target, number),
             )
-        c.execute(
-            "UPDATE issues SET state = 'closed', updated_at = ? WHERE repo = ? AND number = ?",
-            (now_iso(), target, number),
-        )
 
     return {
-        "status": "closed",
+        "status": "closed" if should_update_local_db else "failed",
         "posted_on_github": posted_on_github,
         "github_error": gh_error,
         "author": author,
