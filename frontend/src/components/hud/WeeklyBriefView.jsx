@@ -14,7 +14,9 @@ import {
   Users,
   Shield,
   Layers,
-  ArrowUpRight
+  ArrowUpRight,
+  Printer,
+  FileCode
 } from 'lucide-react';
 import api from '../../api';
 
@@ -112,34 +114,46 @@ ${summaryText}${takeawaySlack}
     URL.revokeObjectURL(url);
   }
 
+  function handleExportJson() {
+    const blob = new Blob([JSON.stringify(brief, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `repoguardian-brief-${(repo || 'repo').replace('/', '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handlePrint() {
+    window.print();
+  }
+
   return (
     <div className="w-full h-full pt-20 sm:pt-24 pb-12 px-4 sm:px-8 max-w-5xl mx-auto flex flex-col space-y-8 overflow-y-auto font-sans scrollbar-thin scrollbar-thumb-white/20">
       
       {/* 1. Header Area (Humanized, Minimalist) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-5">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-              Weekly Maintainer Brief
-            </h1>
-            <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-white/[0.06] text-zinc-300 border border-white/10">
-              {repo}
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-white flex items-center gap-2.5">
+            <span>Weekly Executive Brief</span>
+            <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-white/5 text-zinc-300 border border-white/10 font-normal">
+              {repo || 'Active Repository'}
             </span>
-          </div>
-          <p className="text-xs text-zinc-400 mt-1">
+          </h1>
+          <p className="text-xs text-zinc-400 font-mono mt-1">
             Executive digest and backlog health overview • {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
           </p>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <button
             onClick={handleCopyMarkdown}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono text-zinc-200 hover:text-white bg-white/[0.04] hover:bg-white/10 border border-white/10 transition cursor-pointer active:scale-95"
             title="Copy formatted Markdown"
           >
             {copiedMd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copiedMd ? 'Copied!' : 'Copy Markdown'}</span>
+            <span>{copiedMd ? 'Copied!' : 'Markdown'}</span>
           </button>
 
           <button
@@ -148,7 +162,7 @@ ${summaryText}${takeawaySlack}
             title="Copy Slack formatted block"
           >
             {copiedSlack ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <MessageSquare className="w-3.5 h-3.5" />}
-            <span>{copiedSlack ? 'Copied!' : 'Copy for Slack'}</span>
+            <span>{copiedSlack ? 'Copied!' : 'Slack'}</span>
           </button>
 
           <button
@@ -157,6 +171,22 @@ ${summaryText}${takeawaySlack}
             title="Download .md Digest"
           >
             <Download className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={handleExportJson}
+            className="p-2 rounded-full text-zinc-400 hover:text-white bg-white/[0.04] hover:bg-white/10 border border-white/10 transition cursor-pointer active:scale-95"
+            title="Export Raw Telemetry JSON"
+          >
+            <FileCode className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={handlePrint}
+            className="p-2 rounded-full text-zinc-400 hover:text-white bg-white/[0.04] hover:bg-white/10 border border-white/10 transition cursor-pointer active:scale-95"
+            title="Print / Save Brief as PDF"
+          >
+            <Printer className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>

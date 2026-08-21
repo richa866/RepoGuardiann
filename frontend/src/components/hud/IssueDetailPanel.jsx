@@ -28,7 +28,9 @@ import {
   GitMerge,
   Link as LinkIcon,
   User,
-  RotateCcw
+  RotateCcw,
+  Edit3,
+  Eye
 } from 'lucide-react';
 import api from '../../api';
 import { RAGDiffModal } from './RAGDiffModal';
@@ -53,6 +55,8 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
   const [closingIssue, setClosingIssue] = useState(false);
   const [issueClosed, setIssueClosed] = useState(false);
   const [actionNotice, setActionNotice] = useState(null);
+  const [editableDraft, setEditableDraft] = useState('');
+  const [isEditingDraft, setIsEditingDraft] = useState(false);
 
   // Fetch issue detail when issue changes
   useEffect(() => {
@@ -64,6 +68,8 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
     setLabelsApplied(false);
     setIssueClosed(false);
     setActionNotice(null);
+    setEditableDraft('');
+    setIsEditingDraft(false);
 
     api.getIssue(issue.number, issue.repo).then(({ data }) => {
       if (isMounted) {
@@ -144,17 +150,19 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
   }
 
   function handleCopyDraft() {
-    if (!draftedComment) return;
-    navigator.clipboard.writeText(draftedComment);
+    const textToCopy = editableDraft || draftedComment;
+    if (!textToCopy) return;
+    navigator.clipboard.writeText(textToCopy);
     setCopiedDraft(true);
     setTimeout(() => setCopiedDraft(false), 2000);
   }
 
   async function handlePostComment() {
-    if (!draftedComment || postingComment) return;
+    const textToPost = editableDraft || draftedComment;
+    if (!textToPost || postingComment) return;
     setPostingComment(true);
     setActionNotice(null);
-    const { data, error } = await api.postComment(issue.number, draftedComment, issue.repo);
+    const { data, error } = await api.postComment(issue.number, textToPost, issue.repo);
     setPostingComment(false);
     if (error) {
       setActionNotice({ type: 'error', text: `Failed to post comment: ${error}` });
@@ -567,16 +575,43 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
           </>
         )}
 
-        {/* Drafted Maintainer Follow-up Comment with 1-Click GitHub Dispatch */}
+        {/* Drafted Maintainer Follow-up Comment with Edit / Preview & 1-Click GitHub Dispatch */}
         {draftedComment && (
           <>
             <div className="h-px bg-white/[0.06]" />
             <div className="space-y-2">
               <div className="flex items-center justify-between flex-wrap gap-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider font-mono text-white flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
-                  Drafted Follow-up Comment
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider font-mono text-white flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                    Drafted Follow-up
+                  </span>
+
+                  {/* Edit / Preview Toggle */}
+                  <div className="flex items-center p-0.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-mono">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingDraft(false)}
+                      className={`px-2 py-0.5 rounded-md transition ${
+                        !isEditingDraft ? 'bg-emerald-500/20 text-emerald-300 font-bold' : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1"><Eye className="w-2.5 h-2.5" /> Preview</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!editableDraft) setEditableDraft(draftedComment);
+                        setIsEditingDraft(true);
+                      }}
+                      className={`px-2 py-0.5 rounded-md transition ${
+                        isEditingDraft ? 'bg-emerald-500/20 text-emerald-300 font-bold' : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1"><Edit3 className="w-2.5 h-2.5" /> Edit</span>
+                    </button>
+                  </div>
+                </div>
 
                 <div className="flex items-center gap-1.5">
                   <button
@@ -604,9 +639,31 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
                 </div>
               </div>
 
-              <div className="text-zinc-300 font-mono text-xs bg-white/[0.03] p-3 rounded-2xl border border-white/[0.06] whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
-                {draftedComment}
-              </div>
+              {isEditingDraft ? (
+                <div className="space-y-1.5">
+                  <textarea
+                    rows={4}
+                    value={editableDraft}
+                    onChange={(e) => setEditableDraft(e.target.value)}
+                    placeholder="Refine follow-up comment..."
+                    className="w-full p-3 rounded-2xl bg-black/60 border border-emerald-500/30 text-xs font-mono text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-400 transition leading-relaxed resize-y"
+                  />
+                  <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500">
+                    <span>Markdown supported (bold, lists, backticks)</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditableDraft(draftedComment)}
+                      className="text-zinc-400 hover:text-white underline cursor-pointer"
+                    >
+                      Reset to AI Draft
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-zinc-300 font-mono text-xs bg-white/[0.03] p-3 rounded-2xl border border-white/[0.06] whitespace-pre-wrap leading-relaxed max-h-36 overflow-y-auto">
+                  {editableDraft || draftedComment}
+                </div>
+              )}
             </div>
           </>
         )}

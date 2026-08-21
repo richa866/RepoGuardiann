@@ -12,7 +12,8 @@ import { PullRequestsView } from './components/hud/PullRequestsView';
 import { HealthMetricsView } from './components/hud/HealthMetricsView';
 import { WeeklyBriefView } from './components/hud/WeeklyBriefView';
 import { ConnectRepoModal } from './components/hud/ConnectRepoModal';
-import { Sparkles } from 'lucide-react';
+import { KeyboardShortcutsModal } from './components/hud/KeyboardShortcutsModal';
+import { Sparkles, Keyboard } from 'lucide-react';
 import './App.css';
 
 export default function App() {
@@ -177,6 +178,55 @@ export default function App() {
     }
     refreshData();
   };
+
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+
+  // Global Maintainer Keyboard Shortcuts
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName)) {
+        if (e.key === 'Escape') e.target.blur();
+        return;
+      }
+
+      if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+        e.preventDefault();
+        setIsShortcutsOpen((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        if (isShortcutsOpen) setIsShortcutsOpen(false);
+        else if (isConnectOpen) setIsConnectOpen(false);
+        else if (selectedIssue) setSelectedIssue(null);
+      } else if (e.key === '1') {
+        setActiveView('3d');
+      } else if (e.key === '2') {
+        setActiveView('list');
+      } else if (e.key === '3') {
+        setActiveView('health');
+      } else if (e.key === '4') {
+        setActiveView('brief');
+      } else if (e.key === 'j' || e.key === 'ArrowDown') {
+        if (issues.length > 0) {
+          const currentIdx = selectedIssue ? issues.findIndex((i) => i.number === selectedIssue.number) : -1;
+          const nextIdx = currentIdx < issues.length - 1 ? currentIdx + 1 : 0;
+          setSelectedIssue(issues[nextIdx]);
+        }
+      } else if (e.key === 'k' || e.key === 'ArrowUp') {
+        if (issues.length > 0) {
+          const currentIdx = selectedIssue ? issues.findIndex((i) => i.number === selectedIssue.number) : 0;
+          const prevIdx = currentIdx > 0 ? currentIdx - 1 : issues.length - 1;
+          setSelectedIssue(issues[prevIdx]);
+        }
+      } else if (e.key.toLowerCase() === 'u' && selectedIssue) {
+        handleFeedbackSubmitted(selectedIssue.number, 'up');
+      } else if (e.key.toLowerCase() === 'r' && !e.metaKey && !e.ctrlKey) {
+        refreshData();
+        showToast('Refreshing repository telemetry...');
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [issues, selectedIssue, isShortcutsOpen, isConnectOpen, refreshData]);
 
   const handleRepoConnected = (newRepo) => {
     showToast(`Connected to ${newRepo}!`);
@@ -381,6 +431,18 @@ export default function App() {
         </div>
       )}
 
+      {/* Keyboard Shortcuts Trigger Button */}
+      <button
+        type="button"
+        onClick={() => setIsShortcutsOpen(true)}
+        className="fixed bottom-4 left-4 z-40 hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/80 border border-white/10 hover:border-sky-500/40 text-[11px] font-mono text-zinc-400 hover:text-sky-300 backdrop-blur-xl shadow-lg transition cursor-pointer"
+        title="View Maintainer Keyboard Shortcuts (?)"
+      >
+        <Keyboard className="w-3 h-3 text-sky-400" />
+        <span>Shortcuts</span>
+        <kbd className="px-1 py-0.2 rounded bg-white/10 text-white font-bold text-[9px]">?</kbd>
+      </button>
+
       {/* Connect Repo Modal */}
       <ConnectRepoModal
         isOpen={isConnectOpen}
@@ -388,6 +450,12 @@ export default function App() {
         onConnected={handleRepoConnected}
         user={currentUser}
         sessionToken={sessionToken}
+      />
+
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
       />
     </div>
   );
