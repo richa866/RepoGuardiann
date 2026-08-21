@@ -4,13 +4,16 @@ Implements exact CONTRACTS.md REST specifications with Pydantic response validat
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query, Header
 from pydantic import BaseModel, Field
 
+from app.config import settings
 from app.db.database import get_active_repo, get_effective_repo, get_conn, get_repo_row, now_iso, tx
 from app.github.client import GitHubClient
 
+logger = logging.getLogger("repoguardian.api.issues")
 router = APIRouter(tags=["issues"])
 
 
@@ -446,9 +449,9 @@ def post_comment_endpoint(
 
     with tx() as c:
         cur = c.execute(
-            "INSERT INTO comments (repo, issue_number, author, body, created_at, updated_at) "
+            "INSERT INTO comments (repo, issue_number, author, body, created_at, github_comment_id) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (target, number, author, body.body, now_iso(), now_iso()),
+            (target, number, author, body.body, now_iso(), gh_comment_id),
         )
         local_id = cur.lastrowid
 
@@ -542,8 +545,8 @@ def close_issue_endpoint(
         with tx() as c:
             if body.comment:
                 c.execute(
-                    "INSERT INTO comments (repo, issue_number, author, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    (target, number, author, body.comment, now_iso(), now_iso()),
+                    "INSERT INTO comments (repo, issue_number, author, body, created_at) VALUES (?, ?, ?, ?, ?)",
+                    (target, number, author, body.comment, now_iso()),
                 )
             c.execute(
                 "UPDATE issues SET state = 'closed', updated_at = ? WHERE repo = ? AND number = ?",
