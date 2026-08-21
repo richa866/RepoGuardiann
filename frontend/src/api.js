@@ -4,6 +4,17 @@ const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const client = axios.create({ baseURL: BASE_URL, timeout: 30000 });
 
+// Attach active session token if present
+client.interceptors.request.use((config) => {
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("repoguardian_token");
+    if (token && !config.headers.Authorization) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
+  return config;
+});
+
 // Every call returns { data, notConfigured, error } instead of throwing, so
 // components can render a clear banner instead of a blank screen when
 // GitHub/Gemini keys are missing (503 not_configured) or the backend is down.

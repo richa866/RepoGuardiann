@@ -18,7 +18,12 @@ import {
   Eye,
   EyeOff,
   Terminal,
-  ExternalLink
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  Mail,
+  FileCode2,
+  ShieldCheck
 } from 'lucide-react';
 import api from '../../api';
 
@@ -143,6 +148,7 @@ export function Dynamic3DLoginPage({ onLoginSuccess }) {
   const [errorMsg, setErrorMsg] = useState(null);
   const [oauthConfigured, setOauthConfigured] = useState(false);
   const [oauthUrl, setOauthUrl] = useState(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   const mousePos = useRef({ x: 0, y: 0 });
 
@@ -304,11 +310,21 @@ export function Dynamic3DLoginPage({ onLoginSuccess }) {
         {/* Tab Content: Token Login */}
         {activeTab === 'token' && (
           <form onSubmit={handleVerifyToken} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-mono text-zinc-300 flex items-center justify-between">
-                <span>Personal Access Token</span>
-                <span className="text-[10px] text-zinc-500">scope: repo, read:org</span>
-              </label>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-mono text-zinc-300">
+                  Personal Access Token (Classic or Fine-Grained)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowGuide(!showGuide)}
+                  className="text-[11px] font-mono text-sky-400 hover:text-sky-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <HelpCircle className="w-3 h-3" />
+                  <span>How to generate</span>
+                  {showGuide ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+              </div>
               
               <div className="relative">
                 <input
@@ -327,6 +343,59 @@ export function Dynamic3DLoginPage({ onLoginSuccess }) {
                   {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
+
+              {/* Scope Checklist Indicator */}
+              <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono text-zinc-400">
+                <span className="text-zinc-500">Required Scopes:</span>
+                <span className="px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20 font-bold flex items-center gap-1">
+                  <FileCode2 className="w-2.5 h-2.5" /> repo
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-bold flex items-center gap-1">
+                  <Mail className="w-2.5 h-2.5" /> user:email
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-bold flex items-center gap-1">
+                  <ShieldCheck className="w-2.5 h-2.5" /> read:user
+                </span>
+              </div>
+
+              {/* Expandable Step-by-Step PAT Generation Guide */}
+              {showGuide && (
+                <div className="p-3.5 rounded-2xl bg-sky-950/40 border border-sky-500/30 text-xs font-mono space-y-2.5 text-zinc-300 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between text-sky-300 font-bold text-[11px] border-b border-sky-500/20 pb-1.5">
+                    <span>Steps to create a GitHub Personal Access Token:</span>
+                    <a
+                      href="https://github.com/settings/tokens/new?scopes=repo,read:user,user:email&description=RepoGuardian"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-sky-400 hover:underline cursor-pointer"
+                    >
+                      <span>Open GitHub Settings</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-zinc-300">
+                    <li>
+                      Open <strong className="text-white">GitHub → Settings → Developer Settings → Personal Access Tokens → Tokens (classic)</strong>.
+                    </li>
+                    <li>
+                      Click <strong className="text-white">Generate new token (classic)</strong> and set Note to <code className="text-sky-300 bg-sky-950/80 px-1 rounded">RepoGuardian</code>.
+                    </li>
+                    <li>
+                      Set Expiration (<strong className="text-white">90 days</strong> or <strong className="text-white">No expiration</strong>).
+                    </li>
+                    <li>
+                      <strong className="text-emerald-400">Important Scopes to tick:</strong>
+                      <ul className="list-disc list-inside pl-3 mt-1 space-y-0.5 text-zinc-400">
+                        <li><code className="text-sky-300 font-bold">repo</code> — Full control of repositories (needed for private repos & triage actions)</li>
+                        <li><code className="text-emerald-300 font-bold">user:email</code> & <code className="text-purple-300 font-bold">read:user</code> — Maintainer identity & email verification</li>
+                      </ul>
+                    </li>
+                    <li>
+                      Click <strong className="text-white">Generate token</strong> at the bottom, copy the <code className="text-amber-300">ghp_...</code> string, and paste it above!
+                    </li>
+                  </ol>
+                </div>
+              )}
             </div>
 
             <button

@@ -10,7 +10,14 @@ import {
   FolderGit2, 
   Star, 
   Lock, 
-  Unlock 
+  Unlock,
+  ExternalLink,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  ShieldCheck,
+  Mail,
+  FileCode2
 } from 'lucide-react';
 import api from '../../api';
 
@@ -30,6 +37,7 @@ export function ConnectRepoModal({ isOpen, onClose, onConnected, user, sessionTo
   const [userRepos, setUserRepos] = useState([]);
   const [loadingUserRepos, setLoadingUserRepos] = useState(false);
   const [tab, setTab] = useState(user ? 'my_repos' : 'presets');
+  const [showTokenGuide, setShowTokenGuide] = useState(false);
 
   // Load user repositories if authenticated
   useEffect(() => {
@@ -79,7 +87,17 @@ export function ConnectRepoModal({ isOpen, onClose, onConnected, user, sessionTo
     const { data, error } = await api.connect(repoInput.trim(), tokenInput.trim() || null);
     if (error) {
       setConnecting(false);
-      setErrorMessage(error.message || `Failed to connect: ${error.code}`);
+      let userFriendlyMsg = error.message || `Failed to connect (${error.code || 'unknown'})`;
+      if (error.code === 'token_invalid' || error.status === 401) {
+        userFriendlyMsg = 'Invalid or expired GitHub token. Please verify token permissions (repo, user:email).';
+      } else if (error.code === 'private_no_token') {
+        userFriendlyMsg = 'This repository is private. Please provide a GitHub Personal Access Token with the "repo" scope.';
+      } else if (error.code === 'not_found' || error.status === 404) {
+        userFriendlyMsg = `Repository "${repoInput.trim()}" not found. Verify owner/repo spelling or check token scope for private repositories.`;
+      } else if (error.code === 'rate_limited') {
+        userFriendlyMsg = 'GitHub API rate limit exceeded. Provide a Personal Access Token to raise quota to 5,000 requests/hour.';
+      }
+      setErrorMessage(userFriendlyMsg);
     }
   }
 
@@ -232,11 +250,22 @@ export function ConnectRepoModal({ isOpen, onClose, onConnected, user, sessionTo
           </div>
 
           {!user && (
-            <div className="space-y-1">
-              <label className="text-xs font-mono text-slate-300 flex items-center justify-between">
-                <span>Personal Access Token (Optional)</span>
-                <span className="text-[10px] text-slate-500">Public repos work with 0 tokens</span>
-              </label>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-mono text-slate-300">
+                  Personal Access Token (Optional)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowTokenGuide(!showTokenGuide)}
+                  className="text-[11px] font-mono text-sky-400 hover:text-sky-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <HelpCircle className="w-3 h-3" />
+                  <span>How to generate & required scopes</span>
+                  {showTokenGuide ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+              </div>
+
               <input
                 type="password"
                 placeholder="ghp_... (raises rate limit to 5000/hr)"
@@ -244,6 +273,59 @@ export function ConnectRepoModal({ isOpen, onClose, onConnected, user, sessionTo
                 onChange={(e) => setTokenInput(e.target.value)}
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-white/10 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-400"
               />
+
+              {/* Scope Checklist Indicator */}
+              <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono text-zinc-400">
+                <span className="text-zinc-500">Required Scopes:</span>
+                <span className="px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20 font-bold flex items-center gap-1">
+                  <FileCode2 className="w-2.5 h-2.5" /> repo
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-bold flex items-center gap-1">
+                  <Mail className="w-2.5 h-2.5" /> user:email
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-bold flex items-center gap-1">
+                  <ShieldCheck className="w-2.5 h-2.5" /> read:user
+                </span>
+              </div>
+
+              {/* Expandable Step-by-Step PAT Generation Guide */}
+              {showTokenGuide && (
+                <div className="p-3.5 rounded-2xl bg-sky-950/40 border border-sky-500/30 text-xs font-mono space-y-2.5 text-zinc-300 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between text-sky-300 font-bold text-[11px] border-b border-sky-500/20 pb-1.5">
+                    <span>How to create a GitHub Personal Access Token:</span>
+                    <a
+                      href="https://github.com/settings/tokens/new?scopes=repo,read:user,user:email&description=RepoGuardian"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-sky-400 hover:underline cursor-pointer"
+                    >
+                      <span>Open GitHub Settings</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-zinc-300">
+                    <li>
+                      Go to <strong className="text-white">GitHub → Settings → Developer Settings → Personal Access Tokens → Tokens (classic)</strong>.
+                    </li>
+                    <li>
+                      Click <strong className="text-white">Generate new token (classic)</strong> and set Note to <code className="text-sky-300 bg-sky-950/80 px-1 rounded">RepoGuardian</code>.
+                    </li>
+                    <li>
+                      Select expiration (<strong className="text-white">90 days</strong> or <strong className="text-white">No expiration</strong>).
+                    </li>
+                    <li>
+                      <strong className="text-emerald-400">Crucial:</strong> Tick the following scope checkboxes:
+                      <ul className="list-disc list-inside pl-3 mt-1 space-y-0.5 text-zinc-400">
+                        <li><code className="text-sky-300">repo</code> — Full control of repositories (needed for private repos & triage actions)</li>
+                        <li><code className="text-emerald-300">user:email</code> & <code className="text-purple-300">read:user</code> — Maintainer identity & permissions</li>
+                      </ul>
+                    </li>
+                    <li>
+                      Click <strong className="text-white">Generate token</strong> at the bottom, copy the <code className="text-amber-300">ghp_...</code> string, and paste it above!
+                    </li>
+                  </ol>
+                </div>
+              )}
             </div>
           )}
 

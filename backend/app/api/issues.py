@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Header
 from pydantic import BaseModel, Field
 
 from app.db.database import get_active_repo, get_effective_repo, get_conn, get_repo_row, now_iso, tx
@@ -402,35 +402,62 @@ class CloseIssueIn(BaseModel):
     repo: Optional[str] = None
 
 
+def _resolve_caller_identity(authorization: str | None = None, repo_token: str | None = None) -> tuple[str, str | None]:
+    """Resolves (author_login, github_token) from optional Bearer session token or repo config."""
+    from app.db.database import get_session_user
+    author = "repoguardian-bot"
+    github_token = repo_token or settings.github_token
+
+    if authorization and authorization.startswith("Bearer "):
+        session_token = authorization.split("Bearer ", 1)[1].strip()
+        user, session = get_session_user(session_token)
+        if user and session:
+            author = user.get("login") or "maintainer"
+            if session.get("github_token"):
+                github_token = session.get("github_token")
+
+    return author, github_token
+
+
 @router.post("/issues/{number}/comment")
-def post_comment_endpoint(number: int, body: PostCommentIn):
+def post_comment_endpoint(
+    number: int,
+    body: PostCommentIn,
+    authorization: Optional[str] = Header(None),
+):
     target = _require_active_repo(body.repo)
     row = get_repo_row(target)
-    token = row["token"] if row else None
+    row_token = row["token"] if row else None
+    author, token = _resolve_caller_identity(authorization, row_token)
 
     posted_on_github = False
     gh_comment_id = None
+    gh_error = None
+
     if token:
         try:
             client = GitHubClient(token=token)
             gh_res = client.post_comment(target, number, body.body)
             posted_on_github = True
             gh_comment_id = gh_res.get("id")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("GitHub post_comment failed for %s#%s: %s", target, number, exc)
+            gh_error = str(exc)
 
     with tx() as c:
         cur = c.execute(
             "INSERT INTO comments (repo, issue_number, author, body, created_at, updated_at) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (target, number, "repoguardian-bot", body.body, now_iso(), now_iso()),
+            (target, number, author, body.body, now_iso(), now_iso()),
         )
         local_id = cur.lastrowid
 
     return {
         "status": "success",
         "posted_on_github": posted_on_github,
+        "github_error": gh_error,
         "comment_id": gh_comment_id or local_id,
+        "author": author,
         "repo": target,
         "issue_number": number,
         "body": body.body,
@@ -439,19 +466,27 @@ def post_comment_endpoint(number: int, body: PostCommentIn):
 
 
 @router.post("/issues/{number}/labels")
-def add_labels_endpoint(number: int, body: AddLabelsIn):
+def add_labels_endpoint(
+    number: int,
+    body: AddLabelsIn,
+    authorization: Optional[str] = Header(None),
+):
     target = _require_active_repo(body.repo)
     row = get_repo_row(target)
-    token = row["token"] if row else None
+    row_token = row["token"] if row else None
+    author, token = _resolve_caller_identity(authorization, row_token)
 
     posted_on_github = False
+    gh_error = None
+
     if token:
         try:
             client = GitHubClient(token=token)
             client.add_labels(target, number, body.labels)
             posted_on_github = True
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("GitHub add_labels failed for %s#%s: %s", target, number, exc)
+            gh_error = str(exc)
 
     conn = get_conn()
     issue_row = conn.execute("SELECT labels FROM issues WHERE repo = ? AND number = ?", (target, number)).fetchone()
@@ -464,16 +499,29 @@ def add_labels_endpoint(number: int, body: AddLabelsIn):
                 (json.dumps(list(current_labels)), now_iso(), target, number),
             )
 
-    return {"status": "success", "posted_on_github": posted_on_github, "labels": body.labels}
+    return {
+        "status": "success",
+        "posted_on_github": posted_on_github,
+        "github_error": gh_error,
+        "author": author,
+        "labels": body.labels,
+    }
 
 
 @router.post("/issues/{number}/close")
-def close_issue_endpoint(number: int, body: CloseIssueIn):
+def close_issue_endpoint(
+    number: int,
+    body: CloseIssueIn,
+    authorization: Optional[str] = Header(None),
+):
     target = _require_active_repo(body.repo)
     row = get_repo_row(target)
-    token = row["token"] if row else None
+    row_token = row["token"] if row else None
+    author, token = _resolve_caller_identity(authorization, row_token)
 
     posted_on_github = False
+    gh_error = None
+
     if token:
         try:
             client = GitHubClient(token=token)
@@ -481,18 +529,25 @@ def close_issue_endpoint(number: int, body: CloseIssueIn):
                 client.post_comment(target, number, body.comment)
             client.close_issue(target, number, body.reason)
             posted_on_github = True
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("GitHub close_issue failed for %s#%s: %s", target, number, exc)
+            gh_error = str(exc)
 
     with tx() as c:
         if body.comment:
             c.execute(
                 "INSERT INTO comments (repo, issue_number, author, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (target, number, "repoguardian-bot", body.comment, now_iso(), now_iso()),
+                (target, number, author, body.comment, now_iso(), now_iso()),
             )
         c.execute(
             "UPDATE issues SET state = 'closed', updated_at = ? WHERE repo = ? AND number = ?",
             (now_iso(), target, number),
         )
 
-    return {"status": "closed", "posted_on_github": posted_on_github, "issue_number": number}
+    return {
+        "status": "closed",
+        "posted_on_github": posted_on_github,
+        "github_error": gh_error,
+        "author": author,
+        "issue_number": number,
+    }

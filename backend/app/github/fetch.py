@@ -137,7 +137,6 @@ def fetch_repository_data(
     cache_root = get_cache_dir(repo)
     init_db()
     upsert_repo(repo, token)
-    set_active_repo(repo)
 
     set_sync_state(repo, status="running", stage="fetching_issues", current=0, total=max_items, clear_error=True)
     log_monitor_event("fetch_started", f"Fetching up to {max_items} issues for {repo}", repo=repo)
