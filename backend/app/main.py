@@ -128,10 +128,10 @@ class SwitchRepoIn(BaseModel):
 
 @app.post("/repos/active", tags=["repos"])
 def set_active_repo_endpoint(body: SwitchRepoIn):
-    from app.db.database import set_active_repo, get_repo_row, insert_repo, get_conn
+    from app.db.database import set_active_repo, get_repo_row, upsert_repo, get_conn
     row = get_repo_row(body.repo)
     if not row:
-        insert_repo(body.repo, token=None)
+        upsert_repo(body.repo, token=None)
     set_active_repo(body.repo)
 
     # Check if repo has issues; if 0, trigger background ingestion

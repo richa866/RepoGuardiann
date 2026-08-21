@@ -84,6 +84,13 @@ class GitHubClient:
     def _handle_rate_limit(self, reset_epoch: int | None = None) -> None:
         target_epoch = reset_epoch or self.last_rate_limit_reset or int(time.time() + 60)
         sleep_seconds = max(1, int(target_epoch - time.time()) + 1)
+        if sleep_seconds > 60:
+            logger.warning("[github] rate limited with long reset (%ss), raising RateLimitError", sleep_seconds)
+            raise RateLimitError(
+                reset_epoch=target_epoch,
+                authenticated=bool(self.token),
+                message=f"GitHub API rate limit exceeded. Resets in {sleep_seconds // 60} minutes. Provide a Personal Access Token with repo scope to raise quota to 5,000 requests/hour.",
+            )
         logger.warning("[github] rate limited, sleeping %ss", sleep_seconds)
         time.sleep(sleep_seconds)
 
