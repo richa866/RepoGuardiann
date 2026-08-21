@@ -8,7 +8,8 @@ import os
 import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from typing import Optional
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -145,14 +146,23 @@ def set_active_repo_endpoint(body: SwitchRepoIn):
 
 
 @app.post("/sync", tags=["repos"])
-def sync_endpoint(repo: str | None = None):
+def sync_endpoint(repo: str | None = None, authorization: Optional[str] = Header(None)):
     from app.github.fetch import run_sync
+    from app.api.auth import get_session_user
 
     target = repo or get_active_repo()
     if not target:
         raise HTTPException(400, "no active repo")
     row = get_repo_row(target)
     token = row["token"] if row else None
+    if not token and authorization:
+        bearer = authorization.replace("Bearer ", "").strip()
+        user_sess = get_session_user(bearer)
+        if user_sess and user_sess.get("github_token") and user_sess["github_token"] != "demo":
+            token = user_sess["github_token"]
+    if not token and settings.github_token:
+        token = settings.github_token
+
     return run_sync(target, token, max_items=settings.full_sync_max_items)
 
 

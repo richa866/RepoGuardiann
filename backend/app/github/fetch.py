@@ -133,6 +133,24 @@ def fetch_repository_data(
     3. Fetches and caches all comments for each issue.
     4. Normalizes and stores everything into SQLite.
     """
+    if not token:
+        from app.db.database import get_repo_row
+        row = get_repo_row(repo)
+        if row and row["token"]:
+            token = row["token"]
+        elif os.getenv("GITHUB_TOKEN"):
+            token = os.getenv("GITHUB_TOKEN")
+        else:
+            try:
+                conn = get_conn()
+                s_row = conn.execute(
+                    "SELECT github_token FROM sessions WHERE github_token IS NOT NULL AND github_token != 'demo' ORDER BY created_at DESC LIMIT 1"
+                ).fetchone()
+                if s_row and s_row["github_token"]:
+                    token = s_row["github_token"]
+            except Exception:
+                pass
+
     client = GitHubClient(token=token)
     cache_root = get_cache_dir(repo)
     init_db()
@@ -397,7 +415,7 @@ def run_sync(
         token=token,
         since=since,
         max_items=max_items,
-        force_refresh=False,
+        force_refresh=True,
         progress_callback=progress_callback,
     )
 
