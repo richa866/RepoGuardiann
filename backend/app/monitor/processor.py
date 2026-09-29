@@ -7,14 +7,13 @@ from datetime import datetime, timedelta, timezone
 
 from app.agent.synthesis import evaluate_issue
 from app.agent.tools import repo_avg_response_hours
-from app.db.database import get_conn, get_latest_user, log_monitor_event, now_iso, tx
+from app.db.database import get_conn, log_monitor_event, now_iso, tx
 from app.monitor.queue import (
     get_pending_subtasks,
     mark_subtask_done,
     mark_subtask_failed,
     mark_subtask_started,
 )
-from app.notifications import send_pr_notification
 
 logger = logging.getLogger("repoguardian.monitor.processor")
 
@@ -98,29 +97,6 @@ def _compute_health_snapshot(repo: str) -> dict:
     return snapshot
 
 
-def _send_pr_notification(repo: str, issue_number: int) -> dict:
-    """Emails the most-recently-logged-in maintainer about a new PR. Skips
-    quietly (not an error) if nobody's ever logged in, or Resend isn't
-    configured -- a demo running with zero keys shouldn't fail subtasks."""
-    user = get_latest_user()
-    if not user or not user.get("email"):
-        return {"sent": False, "reason": "no logged-in user with an email on record", "log": "PR notification skipped: no user"}
-
-    row = get_conn().execute(
-        "SELECT number, title, author, url FROM issues WHERE repo = ? AND number = ?",
-        (repo, issue_number),
-    ).fetchone()
-    if not row:
-        return {"sent": False, "reason": "issue not found", "log": "PR notification skipped: issue missing"}
-
-    sent = send_pr_notification(user["email"], repo, dict(row))
-    return {
-        "sent": sent,
-        "to": user["email"],
-        "log": f"PR notification to {user['email']} for #{issue_number}" if sent else f"PR notification to {user['email']} failed for #{issue_number}",
-    }
-
-
 def process_one_subtask(subtask: dict) -> dict:
     subtask_id = subtask["id"]
     repo = subtask["repo"]
@@ -144,11 +120,6 @@ def process_one_subtask(subtask: dict) -> dict:
         elif task_type == "health_trend_check":
             res = _compute_health_snapshot(repo)
             mark_subtask_done(subtask_id, res, f"Recorded health snapshot for {repo}")
-            return res
-
-        elif task_type == "pr_notification" and issue_number:
-            res = _send_pr_notification(repo, issue_number)
-            mark_subtask_done(subtask_id, res, res.get("log", f"PR notification for #{issue_number}"))
             return res
 
         else:

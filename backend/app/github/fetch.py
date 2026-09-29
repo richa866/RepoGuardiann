@@ -232,12 +232,6 @@ def fetch_repository_data(
                     _, created2 = enqueue_subtask(repo, "missing_info_check", norm_issue["number"], norm_issue["updated_at"])
                     subtasks_created_count += int(created1) + int(created2)
 
-                    # Notify on brand-new PRs only -- not every edit/label change
-                    # to an existing PR, and never on plain issues.
-                    if is_new and norm_issue["is_pr"]:
-                        _, created3 = enqueue_subtask(repo, "pr_notification", norm_issue["number"], norm_issue["updated_at"])
-                        subtasks_created_count += int(created3)
-
                 # Log one-line summary per issue processed
                 kind_str = "PR" if norm_issue["is_pr"] else "Issue"
                 title_snippet = (norm_issue["title"][:45] + "...") if len(norm_issue["title"]) > 45 else norm_issue["title"]
@@ -314,7 +308,6 @@ def run_sync(
     token: str | None = None,
     since: str | None = None,
     max_items: int = 300,
-    force_refresh: bool = False,
     progress_callback: Callable[[str, int, int], None] | None = None,
 ) -> dict:
     """Wrapper function matching run_sync signature for background workers."""
@@ -322,7 +315,7 @@ def run_sync(
         repo=repo,
         token=token,
         max_items=max_items,
-        force_refresh=force_refresh,
+        force_refresh=False,
         progress_callback=progress_callback,
     )
 

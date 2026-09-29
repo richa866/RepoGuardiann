@@ -33,18 +33,7 @@ import {
 import api from '../../api';
 import { RAGDiffModal } from './RAGDiffModal';
 
-// "gemini-3.6-flash" -> "Gemini 3.6 Flash" -- reads the real configured
-// model from /health instead of a hardcoded label that silently goes
-// stale the next time the model changes.
-function formatModelLabel(model) {
-  if (!model) return 'Gemini';
-  return model
-    .split('-')
-    .map((part) => (part[0]?.toUpperCase() || '') + part.slice(1))
-    .join(' ');
-}
-
-export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedbackMap = {}, llmModel }) {
+export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedbackMap = {} }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copiedDraft, setCopiedDraft] = useState(false);
@@ -327,7 +316,7 @@ export function IssueDetailPanel({ issue, onClose, onFeedbackSubmitted, feedback
             {isGemini ? (
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1 shadow-sm">
                 <Sparkles className="w-3 h-3 text-purple-400" />
-                {formatModelLabel(llmModel)}
+                Gemini 2.5 Flash
               </span>
             ) : (
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-white/5 text-zinc-400 border border-white/10 flex items-center gap-1">

@@ -49,7 +49,6 @@ class HealthResponse(BaseModel):
     active_repo: Optional[str] = None
     github_configured: bool = False
     llm_provider: str = "gemini"
-    llm_model: Optional[str] = None
     llm_configured: bool = False
     database_connected: bool = True
     chroma_connected: bool = True
@@ -250,7 +249,6 @@ def get_health(repo: Optional[str] = None):
         active_repo=target,
         github_configured=bool(settings.github_token),
         llm_provider=getattr(settings, "llm_provider", "gemini"),
-        llm_model=getattr(settings, "gemini_model", None),
         llm_configured=bool(getattr(settings, "gemini_api_key", None) or getattr(settings, "anthropic_api_key", None)),
         database_connected=db_connected,
         chroma_connected=chroma_connected,

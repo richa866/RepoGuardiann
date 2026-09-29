@@ -57,8 +57,6 @@ class Settings:
     github_client_secret: str | None = field(default_factory=lambda: _env("GITHUB_CLIENT_SECRET") or None)
     anthropic_api_key: str | None = field(default_factory=lambda: _env("ANTHROPIC_API_KEY") or None)
     gemini_api_key: str | None = field(default_factory=lambda: _env("GEMINI_API_KEY") or None)
-    resend_api_key: str | None = field(default_factory=lambda: _env("RESEND_API_KEY") or None)
-    notify_from_email: str = field(default_factory=lambda: _env("NOTIFY_FROM_EMAIL", "RepoGuardian <onboarding@resend.dev>"))
     gemini_model: str = field(default_factory=lambda: _env("GEMINI_MODEL", "gemini-1.5-flash"))
     embedding_model: str = field(default_factory=lambda: _env("EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
     monitor_poll_interval_seconds: int = field(
@@ -100,10 +98,6 @@ class Settings:
         if not self.gemini_api_key:
             raise ConfigError(["GEMINI_API_KEY"], "Gemini-powered agent synthesis")
         return self.gemini_api_key
-
-    @property
-    def resend_configured(self) -> bool:
-        return bool(self.resend_api_key)
 
 
 settings = Settings()
