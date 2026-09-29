@@ -55,7 +55,11 @@ def poll_cycle() -> dict:
     new_issues = updated_issues = subtasks_created = 0
     sync_error: str | None = None
     try:
-        result = run_sync(active_repo, token=token, since=since, max_items=50)
+        # force_refresh=True: the raw-response cache has no TTL and is never
+        # otherwise invalidated -- without this, a poll would keep re-reading
+        # the same frozen snapshot from whenever the repo was first synced,
+        # forever, and silently never notice new issues/PRs/comments again.
+        result = run_sync(active_repo, token=token, since=since, max_items=50, force_refresh=True)
         if result.get("status") == "error":
             sync_status = "failed"
             sync_error = result.get("error")

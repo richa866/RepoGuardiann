@@ -343,6 +343,7 @@ export default function App() {
           onClose={() => setSelectedIssue(null)}
           onFeedbackSubmitted={handleFeedbackSubmitted}
           feedbackMap={feedbackMap}
+          llmModel={health?.llm_model}
         />
       )}
 

@@ -102,6 +102,13 @@ def verify_github_token(body: TokenVerifyIn):
         logger.error("Token verification failed: %s", exc)
         raise HTTPException(400, {"error": "verification_failed", "message": f"Failed to verify GitHub token: {exc}"}) from exc
 
+    # /user's `email` field is null for most real accounts -- it only
+    # reports a PUBLIC email. Fall back to /user/emails (needs `user:email`
+    # scope) so notifications still have somewhere to send to. Failure here
+    # (missing scope, etc.) must never block login.
+    if not gh_user.get("email"):
+        gh_user["email"] = gh_client.get_primary_email()
+
     token_preview = _mask_token(raw_token)
     user = upsert_user(gh_user, token_preview=token_preview)
     session = create_session(user["id"], github_token=raw_token)

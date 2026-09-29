@@ -153,7 +153,10 @@ def sync_endpoint(repo: str | None = None):
         raise HTTPException(400, "no active repo")
     row = get_repo_row(target)
     token = row["token"] if row else None
-    return run_sync(target, token, max_items=settings.full_sync_max_items)
+    # force_refresh=True: a manual "Sync Now" must actually hit GitHub, not
+    # silently replay the same cached snapshot from the first sync (see
+    # poller.py for the full explanation of why the raw cache needs this).
+    return run_sync(target, token, max_items=settings.full_sync_max_items, force_refresh=True)
 
 
 @app.get("/brief", tags=["brief"])

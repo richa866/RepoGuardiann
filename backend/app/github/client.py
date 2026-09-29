@@ -294,6 +294,26 @@ class GitHubClient:
             data["oauth_scopes"] = scopes
         return data
 
+    def get_primary_email(self) -> str | None:
+        """GET /user only returns `email` if the user has a PUBLIC email set
+        on their profile -- most accounts leave it private, so that field is
+        null for most real tokens. This is the fallback: /user/emails
+        returns every verified email (public or not), but only if the token
+        was granted the `user:email` scope. Returns None on any failure
+        (missing scope, no verified email) rather than raising -- login must
+        still succeed even if we can't get an email to notify."""
+        try:
+            data, _ = self.get("/user/emails")
+        except requests.HTTPError:
+            return None
+        if not isinstance(data, list):
+            return None
+        primary = next((e for e in data if e.get("primary") and e.get("verified")), None)
+        if primary:
+            return primary.get("email")
+        verified = next((e for e in data if e.get("verified")), None)
+        return verified.get("email") if verified else None
+
     def list_user_repos(
         self,
         visibility: str = "all",
