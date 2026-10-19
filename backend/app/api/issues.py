@@ -416,8 +416,10 @@ def _resolve_caller_identity(authorization: str | None = None, repo_token: str |
         user, session = get_session_user(session_token)
         if user and session:
             author = user.get("login") or "maintainer"
-            if session.get("github_token"):
+            if session.get("github_token") and session["github_token"] != "demo":
                 github_token = session.get("github_token")
+            elif session.get("github_token") == "demo":
+                github_token = None
 
     return author, github_token
 
